@@ -63,7 +63,6 @@ def make_exchange():
 ex = make_exchange()
 balance = ex.fetch_balance({'type': 'future'})
 usdt_balance = balance['total']['USDT']
-logging.info(f"Account Balance:--> {usdt_balance}")
 
 # ───────────────────────────────────────────────────────────────────────────
 # 2. HELPERS • sessions, sweeps, qty/price rounding
