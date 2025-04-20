@@ -11,18 +11,18 @@ import socket
 # ───────────────────────────────────────────────────────────────────────────
 # 0. CONFIG
 # ───────────────────────────────────────────────────────────────────────────
-ACCOUNT_SIZE_START = 2_000.0          # starting equity in USDT
+ACCOUNT_SIZE_START = 20.0          # starting equity in USDT
 RISK_PER_TRADE     = 0.02             # fraction of equity to risk
 LEVERAGE           = 25               # x‑leverage
 RR_STATIC          = 3.0              # reward:risk
 TIMEFRAME          = '5m'
-SYMBOLS            = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']   # trade universe
+SYMBOLS            = ['SOL/USDT', 'XRP/USDT', 'LINK/USDT', 'BTC/USDT', 'ETH/USDT', 'LTC/USDT']   # trade universe
 TESTNET            = False            # <-- flip to True for testnet
 
-# API_KEY    = os.getenv("BINANCE_KEY")
-# API_SECRET = os.getenv("BINANCE_SECRET")
-API_KEY    = "rdpvKsuXdhdNXHPAM7XgZ6sfCQXLXBvfNFLMEQZNqaeHilqbIREar8LXWj65x8z8"
-API_SECRET = "jciGO3TOYa5CSHVS1qWG2H0gV7hCtiRyC8eM3x5x3AqiRN2iXg91Z3uapXDsieLx"
+API_KEY    = os.getenv("BINANCE_KEY")
+API_SECRET = os.getenv("BINANCE_SECRET")
+# API_KEY    = "rdpvKsuXdhdNXHPAM7XgZ6sfCQXLXBvfNFLMEQZNqaeHilqbIREar8LXWj65x8z8"
+# API_SECRET = "jciGO3TOYa5CSHVS1qWG2H0gV7hCtiRyC8eM3x5x3AqiRN2iXg91Z3uapXDsieLx"
 if not API_KEY or not API_SECRET:
     raise EnvironmentError("Set BINANCE_KEY and BINANCE_SECRET in env!")
 
@@ -49,6 +49,9 @@ def make_exchange():
     return exchange
 
 ex = make_exchange()
+balance = ex.fetch_balance({'type': 'future'})
+usdt_balance = balance['total']['USDT']
+print("Account Balance: ", usdt_balance)
 
 # ───────────────────────────────────────────────────────────────────────────
 # 2. HELPERS • sessions, sweeps, qty/price rounding
@@ -87,7 +90,9 @@ def detect_sweep(asia_df, london_df):
 # ───────────────────────────────────────────────────────────────────────────
 def trade_symbol(symbol):
     price_prec, qty_prec = get_precision(symbol)
-    equity = ACCOUNT_SIZE_START
+    balance = ex.fetch_balance({'type': 'future'})
+    equity = balance['total']['USDT']
+    print(f"{symbol} | {dt.datetime.utcnow()} | Starting with {equity:.2f} USDT available.")
     in_position = False
     order_ids = {}
     last_trade_day = None
