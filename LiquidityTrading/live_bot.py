@@ -7,6 +7,18 @@ from decimal import Decimal, ROUND_DOWN
 import ccxt
 import pandas as pd
 import socket
+import logging
+
+# Set up basic logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler("/home/ec2-user/TradingBots/LiquidityTrading/live_bot.log"),
+        logging.StreamHandler()
+    ]
+)
+
 
 # ───────────────────────────────────────────────────────────────────────────
 # 0. CONFIG
@@ -29,8 +41,8 @@ if not API_KEY or not API_SECRET:
 # Python Program to Get IP Address
 hostname = socket.gethostname()
 IPAddr = socket.gethostbyname(hostname)
-print("Your Computer Name is:" + hostname)
-print("Your Computer IP Address is:" + IPAddr)
+logging.info("Your Computer Name is:" + hostname)
+logging.info("Your Computer IP Address is:" + IPAddr)
 # ───────────────────────────────────────────────────────────────────────────
 # 1. EXCHANGE CONSTRUCTOR
 # ───────────────────────────────────────────────────────────────────────────
@@ -51,7 +63,7 @@ def make_exchange():
 ex = make_exchange()
 balance = ex.fetch_balance({'type': 'future'})
 usdt_balance = balance['total']['USDT']
-print("Account Balance: ", usdt_balance)
+logging.info("Account Balance: ", usdt_balance)
 
 # ───────────────────────────────────────────────────────────────────────────
 # 2. HELPERS • sessions, sweeps, qty/price rounding
@@ -92,7 +104,7 @@ def trade_symbol(symbol):
     price_prec, qty_prec = get_precision(symbol)
     balance = ex.fetch_balance({'type': 'future'})
     equity = balance['total']['USDT']
-    print(f"{symbol} | {dt.datetime.utcnow()} | Starting with {equity:.2f} USDT available.")
+    logging.info(f"{symbol} | {dt.datetime.utcnow()} | Starting with {equity:.2f} USDT available.")
     in_position = False
     order_ids = {}
     last_trade_day = None
@@ -143,14 +155,14 @@ def trade_symbol(symbol):
         contracts  *= LEVERAGE / trade['entry']           # convert → qty
         qty         = round_qty(contracts, qty_prec)
         if qty <= 0:
-            print("Qty rounds to zero – skip.")
+            logging.info("Qty rounds to zero – skip.")
             time.sleep(30);  continue
 
         side    = 'sell' if trade['direction']=='short' else 'buy'
         hedge   = 'buy'  if side=='sell' else 'sell'
 
         # ─────── place MARKET entry
-        print(f"{symbol} | {now} placing market {side} {qty}")
+        logging.info(f"{symbol} | {now} placing market {side} {qty}")
         entry = ex.create_order(symbol, 'MARKET', side.upper(), qty)
 
         # ─────── immediately attach TP & SL (reduce‑only)
@@ -168,7 +180,7 @@ def trade_symbol(symbol):
 
         order_ids = {'tp': tp_ord['id'], 'sl': sl_ord['id']}
         in_position = True
-        print(f"--> entry={entry['price']}  TP={tp}  SL={sl}")
+        logging.info(f"--> entry={entry['price']}  TP={tp}  SL={sl}")
         time.sleep(10)
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -176,7 +188,7 @@ def trade_symbol(symbol):
 # ───────────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     import threading
-    print("Bot starting…  ctrl‑c to stop.")
+    logging.info("Bot starting…  ctrl‑c to stop.")
     for sym in SYMBOLS:
         t = threading.Thread(target=trade_symbol, args=(sym,), daemon=True)
         t.start()
