@@ -19,10 +19,10 @@ TIMEFRAME          = '5m'
 SYMBOLS            = ['SOL/USDT', 'XRP/USDT', 'LINK/USDT', 'BTC/USDT', 'ETH/USDT', 'LTC/USDT']   # trade universe
 TESTNET            = False            # <-- flip to True for testnet
 
-API_KEY    = os.getenv("BINANCE_KEY")
-API_SECRET = os.getenv("BINANCE_SECRET")
-# API_KEY    = "rdpvKsuXdhdNXHPAM7XgZ6sfCQXLXBvfNFLMEQZNqaeHilqbIREar8LXWj65x8z8"
-# API_SECRET = "jciGO3TOYa5CSHVS1qWG2H0gV7hCtiRyC8eM3x5x3AqiRN2iXg91Z3uapXDsieLx"
+# API_KEY    = os.getenv("BINANCE_KEY")
+# API_SECRET = os.getenv("BINANCE_SECRET")
+API_KEY    = "rdpvKsuXdhdNXHPAM7XgZ6sfCQXLXBvfNFLMEQZNqaeHilqbIREar8LXWj65x8z8"
+API_SECRET = "jciGO3TOYa5CSHVS1qWG2H0gV7hCtiRyC8eM3x5x3AqiRN2iXg91Z3uapXDsieLx"
 if not API_KEY or not API_SECRET:
     raise EnvironmentError("Set BINANCE_KEY and BINANCE_SECRET in env!")
 
