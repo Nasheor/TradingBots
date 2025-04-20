@@ -1,0 +1,2 @@
+# TradingBots
+Trading Strategies Mechanical
