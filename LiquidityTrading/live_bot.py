@@ -6,6 +6,7 @@ import os, time, datetime as dt
 from decimal import Decimal, ROUND_DOWN
 import ccxt
 import pandas as pd
+import socket
 
 # ───────────────────────────────────────────────────────────────────────────
 # 0. CONFIG
@@ -25,6 +26,11 @@ API_SECRET = "jciGO3TOYa5CSHVS1qWG2H0gV7hCtiRyC8eM3x5x3AqiRN2iXg91Z3uapXDsieLx"
 if not API_KEY or not API_SECRET:
     raise EnvironmentError("Set BINANCE_KEY and BINANCE_SECRET in env!")
 
+# Python Program to Get IP Address
+hostname = socket.gethostname()
+IPAddr = socket.gethostbyname(hostname)
+print("Your Computer Name is:" + hostname)
+print("Your Computer IP Address is:" + IPAddr)
 # ───────────────────────────────────────────────────────────────────────────
 # 1. EXCHANGE CONSTRUCTOR
 # ───────────────────────────────────────────────────────────────────────────
@@ -32,13 +38,15 @@ def make_exchange():
     url = 'https://fapi.binance.com'
     if TESTNET:
         url = 'https://testnet.binancefuture.com'
-    return ccxt.binanceusdm({
+    exchange = ccxt.binanceusdm({
         'apiKey': API_KEY,
         'secret': API_SECRET,
         'enableRateLimit': True,
         'options': {'defaultType': 'future'},
         'urls': {'api': {'public': url, 'private': url}}
     })
+    exchange.load_markets()   # <<< ADD THIS LINE
+    return exchange
 
 ex = make_exchange()
 
