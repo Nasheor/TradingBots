@@ -31,10 +31,10 @@ TIMEFRAME          = '5m'
 SYMBOLS            = ['SOL/USDT', 'XRP/USDT', 'LINK/USDT', 'BTC/USDT', 'ETH/USDT', 'LTC/USDT']   # trade universe
 TESTNET            = False            # <-- flip to True for testnet
 
-API_KEY    = os.getenv("BINANCE_KEY")
-API_SECRET = os.getenv("BINANCE_SECRET")
-# API_KEY    = "rdpvKsuXdhdNXHPAM7XgZ6sfCQXLXBvfNFLMEQZNqaeHilqbIREar8LXWj65x8z8"
-# API_SECRET = "jciGO3TOYa5CSHVS1qWG2H0gV7hCtiRyC8eM3x5x3AqiRN2iXg91Z3uapXDsieLx"
+# API_KEY    = os.getenv("BINANCE_KEY")
+# API_SECRET = os.getenv("BINANCE_SECRET")
+API_KEY    = "rdpvKsuXdhdNXHPAM7XgZ6sfCQXLXBvfNFLMEQZNqaeHilqbIREar8LXWj65x8z8"
+API_SECRET = "jciGO3TOYa5CSHVS1qWG2H0gV7hCtiRyC8eM3x5x3AqiRN2iXg91Z3uapXDsieLx"
 if not API_KEY or not API_SECRET:
     raise EnvironmentError("Set BINANCE_KEY and BINANCE_SECRET in env!")
 
@@ -95,6 +95,34 @@ def detect_sweep(asia_df, london_df):
     if lon_hi > asia_hi:  return 'high'
     if lon_lo < asia_lo:  return 'low'
     return None
+
+def execute_killzone_trade(killzone_df, sweep_side, account_balance):
+    if killzone_df.empty or sweep_side is None or sweep_side == 'both':
+        return None
+
+    first_candle = killzone_df.iloc[0]
+    entry_time = first_candle.name
+    entry_price = first_candle['close']
+
+    direction = 'short' if sweep_side == 'high' else 'long'
+    sl = first_candle['low'] * 0.999 if direction == 'long' else first_candle['high'] * 1.001
+    distance = abs(entry_price - sl)
+    if distance <= 0:
+        return None
+
+    tp = entry_price + distance * RR_STATIC if direction == 'long' else entry_price - distance * RR_STATIC
+    risk_amount = account_balance * RISK_PER_TRADE
+    position_size = risk_amount / distance
+
+    return {
+        'entry_time': entry_time,
+        'direction': direction,
+        'entry': entry_price,
+        'sl': sl,
+        'tp': tp,
+        'distance': distance,
+        'position_size': position_size
+    }
 
 # ───────────────────────────────────────────────────────────────────────────
 # 3. MAIN LOOP PER SYMBOL
