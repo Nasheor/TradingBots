@@ -133,7 +133,7 @@ def execute_killzone_trade(killzone_df, sweep_side, account_balance):
 def trade_symbol(symbol):
     price_prec, qty_prec = get_precision(symbol)
     balance = ex.fetch_balance({'type': 'future'})
-    equity = balance['total']['USDT']
+    equity = balance['total'].get('USDC')
     logging.info(f"{symbol} | {dt.datetime.utcnow()} | Starting with {equity:.2f} USDT available.")
     in_position = False
     order_ids = {}
