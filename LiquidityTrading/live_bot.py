@@ -62,7 +62,10 @@ def make_exchange():
 
 ex = make_exchange()
 balance = ex.fetch_balance({'type': 'future'})
-usdt_balance = balance['total']['USDC']
+usdt_balance = balance['total'].get('USDC')
+#usdc_balance = balance['total'].get('USDC')
+#print(usdt_balance)
+#print(usdc_balance)
 
 # ───────────────────────────────────────────────────────────────────────────
 # 2. HELPERS • sessions, sweeps, qty/price rounding
