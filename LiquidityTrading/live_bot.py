@@ -3,7 +3,7 @@
 live_bot.py  –  Liquidity‑sweep Kill‑Zone strategy, Binance USDT‑M Futures
 """
 import os, time, datetime as dt
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, InvalidOperation
 import ccxt
 import pandas as pd
 import socket
@@ -19,9 +19,7 @@ logging.basicConfig(
     ]
 )
 
-# ──────────────────────────────────────────────────────
-# 0. CONFIG
-# ──────────────────────────────────────────────────────
+# ──── CONFIG ────
 ACCOUNT_SIZE_START = 20.0
 RISK_PER_TRADE     = 0.02
 LEVERAGE           = 25
@@ -38,9 +36,7 @@ IPAddr = socket.gethostbyname(hostname)
 logging.info("Your Computer Name is: " + hostname)
 logging.info("Your Computer IP Address is: " + IPAddr)
 
-# ──────────────────────────────────────────────────────
-# 1. EXCHANGE CONSTRUCTOR
-# ──────────────────────────────────────────────────────
+# ──── EXCHANGE ────
 
 def make_exchange():
     url = 'https://fapi.binance.com'
@@ -58,9 +54,7 @@ def make_exchange():
 
 ex = make_exchange()
 
-# ──────────────────────────────────────────────────────
-# 2. HELPERS
-# ──────────────────────────────────────────────────────
+# ──── HELPERS ────
 
 def get_session(ts: dt.datetime):
     h = ts.hour
@@ -134,15 +128,13 @@ def execute_killzone_trade(killzone_df, sweep_side, account_balance):
         'position_size': position_size
     }
 
-# ──────────────────────────────────────────────────────
-# 3. MAIN LOOP
-# ──────────────────────────────────────────────────────
+# ──── MAIN LOOP ────
 
 def trade_symbol(symbol):
     price_prec, qty_prec = get_precision(symbol)
 
     balance = ex.fetch_balance({'type': 'future'})
-    equity = balance['total'].get('USDC')
+    equity = balance['total'].get('USDT') or balance['total'].get('BNFCR') or balance['total'].get('USDC')
 
     if not equity:
         logging.warning(f"No balance found for {symbol}. Skipping.")
@@ -216,9 +208,7 @@ def trade_symbol(symbol):
         logging.info(f"--> entry={entry['price']}  TP={tp}  SL={sl}")
         time.sleep(10)
 
-# ──────────────────────────────────────────────────────
-# 4. RUN THREADS
-# ──────────────────────────────────────────────────────
+# ──── THREAD RUNNER ────
 if __name__ == '__main__':
     import threading
     logging.info("Bot starting…  ctrl‑c to stop.")
