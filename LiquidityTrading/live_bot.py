@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-live_bot.py  –  Liquidity‑sweep Kill‑Zone strategy, Binance USDT‑M Futures
-This version adds safe sizing that respects available margin and
-wraps order placement in try/except so the thread never crashes on
-`InsufficientFunds`.
+live_bot.py – Liquidity‑sweep Kill‑Zone strategy for Binance USDT‑M Futures
+• Safe position‑sizing that respects available margin
+• Robust error‑handling so a single symbol/thread cannot crash the bot
+• Detailed logging captured by systemd‑journal + log file
 """
 import os, time, datetime as dt
 from decimal import Decimal, ROUND_DOWN, InvalidOperation
@@ -12,9 +12,9 @@ import pandas as pd
 import socket
 import logging
 
-# ────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
 # Logging
-# ────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -24,50 +24,46 @@ logging.basicConfig(
     ]
 )
 
-# ────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
 # CONFIG
-# ────────────────────────────────────────────────────────────────
-ACCOUNT_SIZE_START = 20.0          # not used for live sizing now
-RISK_PER_TRADE     = 0.02          # 2 % of wallet balance per trade
-LEVERAGE           = 25            # x‑leverage (affects required margin)
-RR_STATIC          = 3.0           # reward : risk
-TIMEFRAME          = '5m'
-SYMBOLS            = [
+# ──────────────────────────────────────────────
+RISK_PER_TRADE = 0.02          # 2 % of wallet per setup
+LEVERAGE       = 25            # account leverage setting
+RR_STATIC      = 3.0           # take‑profit multiple
+TIMEFRAME      = '5m'
+SYMBOLS = [
     'SOL/USDT', 'XRP/USDT', 'LINK/USDT',
-    'BTC/USDT', 'ETH/USDT', 'LTC/USDT'
+    'BTC/USDT', 'ETH/USDT', 'LTC/USDT',
 ]
-TESTNET            = False         # flip to True for testnet
+TESTNET = False                # flip to True for testnet
 
 API_KEY    = "rdpvKsuXdhdNXHPAM7XgZ6sfCQXLXBvfNFLMEQZNqaeHilqbIREar8LXWj65x8z8"
 API_SECRET = "jciGO3TOYa5CSHVS1qWG2H0gV7hCtiRyC8eM3x5x3AqiRN2iXg91Z3uapXDsieLx"
 
-hostname = socket.gethostname()
-IPAddr   = socket.gethostbyname(hostname)
-logging.info(f"Host: {hostname}  |  IP: {IPAddr}")
+host = socket.gethostname(); ip = socket.gethostbyname(host)
+logging.info(f"Host {host} | IP {ip}")
 
-# ────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
 # Exchange helper
-# ────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
 
 def make_exchange():
-    url = 'https://fapi.binance.com'
-    if TESTNET:
-        url = 'https://testnet.binancefuture.com'
-    exchange = ccxt.binanceusdm({
+    base = 'https://testnet.binancefuture.com' if TESTNET else 'https://fapi.binance.com'
+    ex = ccxt.binanceusdm({
         'apiKey': API_KEY,
         'secret': API_SECRET,
         'enableRateLimit': True,
         'options': {'defaultType': 'future'},
-        'urls': {'api': {'public': url, 'private': url}}
+        'urls': {'api': {'public': base, 'private': base}},
     })
-    exchange.load_markets()
-    return exchange
+    ex.load_markets()
+    return ex
 
 ex = make_exchange()
 
-# ────────────────────────────────────────────────────────────────
-# Utility functions
-# ────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# Utility helpers
+# ──────────────────────────────────────────────
 
 def get_session(ts: dt.datetime):
     h = ts.hour
@@ -80,131 +76,122 @@ def get_precision(symbol):
     info = ex.market(symbol)
     price_prec = info['precision'].get('price') or 2
     qty_prec   = info['precision'].get('amount') or 3
-    logging.info(f"Precision for {symbol} → price: {price_prec}, qty: {qty_prec}")
+    logging.info(f"{symbol} precision → price:{price_prec}, qty:{qty_prec}")
     return int(price_prec), int(qty_prec)
 
-def round_price(p, prec):
+def d_round(value, prec):
     try:
-        return float(Decimal(p).quantize(Decimal(f'1e-{prec}'), rounding=ROUND_DOWN))
+        return float(Decimal(value).quantize(Decimal(f'1e-{prec}'), rounding=ROUND_DOWN))
     except InvalidOperation:
-        logging.error(f"round_price InvalidOperation: p={p} prec={prec}")
-        return p
+        return value
 
-def round_qty(q, prec):
-    try:
-        return float(Decimal(q).quantize(Decimal(f'1e-{prec}'), rounding=ROUND_DOWN))
-    except InvalidOperation:
-        logging.error(f"round_qty InvalidOperation: q={q} prec={prec}")
-        return q
-
-def detect_sweep(asia_df, london_df):
-    if asia_df.empty or london_df.empty:
+def detect_sweep(asian, london):
+    if asian.empty or london.empty:
         return None
-    asia_hi, asia_lo = asia_df['high'].max(), asia_df['low'].min()
-    lon_hi,  lon_lo  = london_df['high'].max(),  london_df['low'].min()
-    if lon_hi > asia_hi and lon_lo < asia_lo:
-        return 'both'
-    if lon_hi > asia_hi:
-        return 'high'
-    if lon_lo < asia_lo:
-        return 'low'
+    a_hi, a_lo = asian['high'].max(), asian['low'].min()
+    l_hi, l_lo = london['high'].max(), london['low'].min()
+    if l_hi > a_hi and l_lo < a_lo: return 'both'
+    if l_hi > a_hi: return 'high'
+    if l_lo < a_lo: return 'low'
     return None
 
-def execute_killzone_trade(killzone_df, sweep_side, account_balance):
-    if killzone_df.empty or sweep_side is None or sweep_side == 'both':
+# ──────────────────────────────────────────────
+# Trade sizing & struct builder
+# ──────────────────────────────────────────────
+
+def build_trade(kill_df, sweep, wallet):
+    if kill_df.empty or sweep in (None, 'both'):
         return None
+    c0          = kill_df.iloc[0]
+    entry_price = c0['close']
+    direction   = 'short' if sweep == 'high' else 'long'
+    sl          = c0['low']*0.999 if direction=='long' else c0['high']*1.001
+    dist        = abs(entry_price - sl)
+    if dist <= 0: return None
+    tp          = entry_price + dist*RR_STATIC if direction=='long' else entry_price - dist*RR_STATIC
+    risk_usdt   = wallet * RISK_PER_TRADE
+    qty_calc    = risk_usdt / dist      # coin qty
+    return dict(entry=entry_price, sl=sl, tp=tp, dir=direction, qty_calc=qty_calc)
 
-    first_candle = killzone_df.iloc[0]
-    entry_time   = first_candle.name
-    entry_price  = first_candle['close']
+# ──────────────────────────────────────────────
+# Worker thread
+# ──────────────────────────────────────────────
 
-    direction  = 'short' if sweep_side == 'high' else 'long'
-    sl         = first_candle['low'] * 0.999 if direction == 'long' else first_candle['high'] * 1.001
-    distance   = abs(entry_price - sl)
-    if distance <= 0:
-        return None
+def worker(symbol):
+    p_prec, q_prec = get_precision(symbol)
 
-    tp         = entry_price + distance * RR_STATIC if direction == 'long' else entry_price - distance * RR_STATIC
-    risk_usdt  = account_balance * RISK_PER_TRADE
-    position_q = risk_usdt / distance  # qty in coin units
-
-    return {
-        'entry_time': entry_time,
-        'direction' : direction,
-        'entry'     : entry_price,
-        'sl'        : sl,
-        'tp'        : tp,
-        'distance'  : distance,
-        'qty_calc'  : position_q,
-    }
-
-# ────────────────────────────────────────────────────────────────
-# Core worker per symbol
-# ────────────────────────────────────────────────────────────────
-
-def trade_symbol(symbol):
-    price_prec, qty_prec = get_precision(symbol)
-
-    balance = ex.fetch_balance({'type': 'future'})
-    equity  = balance['total'].get('USDT') or balance['total'].get('BNFCR') or balance['total'].get('USDC')
-    if not equity:
-        logging.warning(f"{symbol}: No futures balance detected – skipping thread")
+    bal   = ex.fetch_balance({'type': 'future'})['total']
+    wallet = bal.get('USDC')
+    if not wallet:
+        logging.warning(f"{symbol}: No futures balance – skipping")
         return
 
-    logging.info(f"{symbol}: Starting thread with equity ≈ {equity:.2f} USDT")
-
-    in_position, order_ids, last_trade_day = False, {}, None
+    logging.info(f"{symbol}: thread started with wallet≈{wallet:.2f}")
+    in_pos, orders, last_day = False, {}, None
 
     while True:
         now = dt.datetime.utcnow()
-        df  = ex.fetch_ohlcv(symbol, TIMEFRAME, limit=500)
-        df  = pd.DataFrame(df, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
-        df['ts'] = pd.to_datetime(df['ts'], unit='ms', utc=True)
-        df.set_index('ts', inplace=True)
+        candles = ex.fetch_ohlcv(symbol, TIMEFRAME, limit=500)
+        df = pd.DataFrame(candles, columns=['ts','open','high','low','close','vol'])
+        df['ts'] = pd.to_datetime(df['ts'], unit='ms', utc=True); df.set_index('ts', inplace=True)
+        today = now.date(); day_df = df[df.index.date == today]
+        asia = day_df[day_df.index.map(get_session)=='Asia']
+        lon  = day_df[day_df.index.map(get_session)=='London']
+        kill = day_df[day_df.index.map(get_session)=='KillZone']
 
-        today     = now.date()
-        today_df  = df[df.index.date == today]
-        asia_df   = today_df[today_df.index.map(get_session) == 'Asia']
-        london_df = today_df[today_df.index.map(get_session) == 'London']
-        kill_df   = today_df[today_df.index.map(get_session) == 'KillZone']
+        # reset each UTC day
+        if last_day and today>last_day: in_pos, orders = False, {}
+        last_day = today
 
-        # daily reset
-        if last_trade_day and today > last_trade_day:
-            in_position, order_ids = False, {}
-        last_trade_day = today
-
-        # manage open
-        if in_position:
+        if in_pos:
             try:
-                statuses = [ex.fetch_order(oid, symbol)['status'] for oid in order_ids.values()]
-                if any(s in ('closed', 'canceled') for s in statuses):
-                    in_position, order_ids = False, {}
+                statuses=[ex.fetch_order(i,symbol)['status'] for i in orders.values()]
+                if any(s in ('closed','canceled') for s in statuses): in_pos=False; orders={}
             except Exception as e:
-                logging.error(f"{symbol}: error polling orders – {e}")
-            time.sleep(10)
-            continue
+                logging.error(f"{symbol}: poll err {e}")
+            time.sleep(10); continue
 
-        # wait for kill‑zone
-        if get_session(now) != 'KillZone':
-            time.sleep(30)
-            continue
+        if get_session(now)!='KillZone': time.sleep(30); continue
 
-        trade = execute_killzone_trade(kill_df, detect_sweep(asia_df, london_df), equity)
-        if not trade:
-            time.sleep(30)
-            continue
+        trade=build_trade(kill, detect_sweep(asia, lon), wallet)
+        if not trade: time.sleep(30); continue
 
-        # ---------------- position sizing ----------------
-        qty_calc = trade['qty_calc']
-        max_qty  = equity * LEVERAGE / trade['entry'] * 0.98  # 98 % of margin cap
-        qty_raw  = min(qty_calc, max_qty)
-        qty      = round_qty(qty_raw, qty_prec)
-        if qty <= 0:
-            logging.info(f"{symbol}: qty rounds to zero – skip setup")
-            time.sleep(30)
-            continue
+        # sizing cap
+        max_qty = wallet*LEVERAGE/trade['entry']*0.98
+        qty_raw = min(trade['qty_calc'], max_qty)
+        qty     = d_round(qty_raw, q_prec)
+        if qty<=0:
+            logging.info(f"{symbol}: qty≈0, skip")
+            time.sleep(30); continue
 
-        side  = 'sell' if trade['direction'] == 'short' else 'buy'
-        hedge = 'buy'  if side == 'sell' else 'sell'
+        side  = 'sell' if trade['dir']=='short' else 'buy'
+        hedge = 'buy' if side=='sell' else 'sell'
+        logging.info(f"{symbol}: market {side} {qty}")
+        try:
+            entry=ex.create_order(symbol,'MARKET',side.upper(),qty)
+        except ccxt.InsufficientFunds:
+            logging.warning(f"{symbol}: insufficient margin, skipping")
+            time.sleep(60); continue
+        except Exception as e:
+            logging.error(f"{symbol}: order err {e}"); time.sleep(60); continue
 
-        logging
+        tp=d_round(trade['tp'],p_prec); sl=d_round(trade['sl'],p_prec)
+        try:
+            tp_id=ex.create_order(symbol,'LIMIT',hedge.upper(),qty,tp,{'reduceOnly':True,'timeInForce':'GTC'})['id']
+            sl_id=ex.create_order(symbol,'STOP_MARKET',hedge.upper(),qty,None,{'stopPrice':sl,'reduceOnly':True})['id']
+        except Exception as e:
+            logging.error(f"{symbol}: failed attach TPSL {e}")
+        else:
+            orders={'tp':tp_id,'sl':sl_id}; in_pos=True
+            logging.info(f"{symbol}: entry={entry['price']} TP={tp} SL={sl}")
+        time.sleep(10)
+
+# ──────────────────────────────────────────────
+# Launcher
+# ──────────────────────────────────────────────
+if __name__=='__main__':
+    logging.info("Bot starting… Ctrl‑C to stop")
+    import threading
+    for sym in SYMBOLS:
+        threading.Thread(target=worker,args=(sym,),daemon=True).start()
+    while True: time.sleep(60)
