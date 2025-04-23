@@ -122,7 +122,7 @@ def worker(sym):
 
     while True:
         now = dt.datetime.utcnow()
-                raw = ex.fetch_ohlcv(sym, TIMEFRAME, limit=500)
+        raw = ex.fetch_ohlcv(sym, TIMEFRAME, limit=500)
         df = pd.DataFrame(raw, columns=['ts','open','high','low','close','volume'])
         df['ts'] = pd.to_datetime(df['ts'], unit='ms', utc=True)
         df.set_index('ts', inplace=True)
