@@ -71,18 +71,30 @@ def get_session(ts: dt.datetime):
 
 def get_precision(symbol):
     info = ex.market(symbol)
-    price_prec = info['precision'].get('price', 2) or 2
-    qty_prec = info['precision'].get('amount', 3) or 3
+    price_prec = info['precision'].get('price')
+    qty_prec = info['precision'].get('amount')
+    if price_prec is None:
+        price_prec = 2
+    if qty_prec is None:
+        qty_prec = 3
     logging.info(f"Precision for {symbol} → price: {price_prec}, qty: {qty_prec}")
     return price_prec, qty_prec
 
 def round_price(p, prec):
-    q = Decimal(p)
-    return float(q.quantize(Decimal(f'1e-{prec}'), rounding=ROUND_DOWN))
+    try:
+        q = Decimal(p)
+        return float(q.quantize(Decimal(f'1e-{int(prec)}'), rounding=ROUND_DOWN))
+    except (InvalidOperation, TypeError, ValueError):
+        logging.error(f"Invalid price precision value: {prec}")
+        return p
 
 def round_qty(q, prec):
-    qd = Decimal(q)
-    return float(qd.quantize(Decimal(f'1e-{prec}'), rounding=ROUND_DOWN))
+    try:
+        qd = Decimal(q)
+        return float(qd.quantize(Decimal(f'1e-{int(prec)}'), rounding=ROUND_DOWN))
+    except (InvalidOperation, TypeError, ValueError):
+        logging.error(f"Invalid quantity precision value: {prec}")
+        return q
 
 def detect_sweep(asia_df, london_df):
     if asia_df.empty or london_df.empty:
@@ -130,7 +142,7 @@ def trade_symbol(symbol):
     price_prec, qty_prec = get_precision(symbol)
 
     balance = ex.fetch_balance({'type': 'future'})
-    equity = balance['total'].get('USDT') or balance['total'].get('BNFCR') or balance['total'].get('USDC')
+    equity = balance['total'].get('USDC')
 
     if not equity:
         logging.warning(f"No balance found for {symbol}. Skipping.")
