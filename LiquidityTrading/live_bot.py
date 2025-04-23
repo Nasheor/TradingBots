@@ -122,8 +122,8 @@ def worker(sym):
 
     while True:
         now = dt.datetime.utcnow()
-        df = pd.DataFrame(ex.fetch_ohlcv(sym, TIMEFRAME, limit=500),
-                          columns=['ts', 'o', 'h', 'l', 'c', 'v'])
+                raw = ex.fetch_ohlcv(sym, TIMEFRAME, limit=500)
+        df = pd.DataFrame(raw, columns=['ts','open','high','low','close','volume'])
         df['ts'] = pd.to_datetime(df['ts'], unit='ms', utc=True)
         df.set_index('ts', inplace=True)
         day_df = df[df.index.date == now.date()]
