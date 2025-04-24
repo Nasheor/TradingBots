@@ -166,4 +166,5 @@ if __name__=='__main__':
     import threading
     for s in SYMBOLS:
         threading.Thread(target=worker,args=(s,),daemon=True).start()
+        logging.info("---------------------------------------------")
     while True: time.sleep(60)
