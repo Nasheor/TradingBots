@@ -97,7 +97,7 @@ def worker(sym):
     bal = ex.fetch_balance({'type':'future'})
     avail =  bal.get('USDC')['total']
     test = bal['free'].get('USDC', 0.0)
-    logging.info(f"{test} Testing")
+    logging.info(f"{bal} Testing")
     if not avail:
         logging.warning(f"{sym}: no free balance")
         return
