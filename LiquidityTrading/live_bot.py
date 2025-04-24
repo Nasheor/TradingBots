@@ -95,9 +95,7 @@ def worker(sym):
     except Exception as e: logging.warning(f"{sym} leverage fail {e}")
 
     bal = ex.fetch_balance({'type':'future'})
-    avail =  bal.get('USDC')['total']
-    test = bal['free'].get('USDC', 0.0)
-    logging.info(f"{bal} Testing")
+    avail =  float(bal['info']['availableBalance'])
     if not avail:
         logging.warning(f"{sym}: no free balance")
         return
