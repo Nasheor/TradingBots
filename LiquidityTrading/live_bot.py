@@ -95,7 +95,7 @@ def worker(sym):
     except Exception as e: logging.warning(f"{sym} leverage fail {e}")
 
     bal = ex.fetch_balance({'type':'future'})
-    avail =  bal.get('USDC')
+    avail =  bal.get('USDC')['total']
     if not avail:
         logging.warning(f"{sym}: no free balance")
         return
@@ -158,6 +158,7 @@ def worker(sym):
         else:
             orders={'tp':tp_id,'sl':sl_id}; in_pos,traded=True,True
             logging.info(f"{sym}: entry={entry['price']} TP={tp} SL={sl}")
+        logging.info("---------------------------------------------")
         time.sleep(10)
 
 # ─────────────────────── Main ─────────────────────────────
@@ -166,5 +167,4 @@ if __name__=='__main__':
     import threading
     for s in SYMBOLS:
         threading.Thread(target=worker,args=(s,),daemon=True).start()
-        logging.info("---------------------------------------------")
     while True: time.sleep(60)
