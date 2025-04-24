@@ -10,6 +10,13 @@ import time, datetime as dt, socket, logging
 from decimal import Decimal, ROUND_DOWN, InvalidOperation
 import ccxt
 import pandas as pd
+import uuid
+import boto3
+from botocore.exceptions import ClientError
+
+# DynamoDB setup
+dynamodb = boto3.resource('dynamodb', region_name='us-west-1')  # adjust region
+trades_table = dynamodb.Table('Trades')
 
 # ───────────────────────── LOGGING ──────────────────────────
 logging.basicConfig(
@@ -88,6 +95,51 @@ def build_trade(k_df, sweep, avail):
     qty_margin = risk * LEVERAGE / entry
     return dict(entry=entry,sl=sl,tp=tp,dir=direction,qty=min(qty_risk,qty_margin),sl_diff=sl_diff)
 
+def write_trade_open(symbol, reason, entry_price, tp, sl, balance_start):
+    trade_id = str(uuid.uuid4())
+    open_time = dt.datetime.utcnow().isoformat()
+    item = {
+        'trade_id':    trade_id,
+        'symbol':      symbol,
+        'reason':      reason,
+        'open_time':   open_time,
+        'entry_price': Decimal(str(entry_price)),
+        'tp':          Decimal(str(tp)),
+        'sl':          Decimal(str(sl)),
+        'balance_start': Decimal(str(balance_start)),
+        # closing fields will come later:
+        'closed':      False
+    }
+    try:
+        trades_table.put_item(Item=item)
+    except ClientError as e:
+        logging.error(f"DynamoDB open write failed: {e}")
+    return trade_id
+
+def write_trade_close(trade_id, close_price, pnl, balance_end):
+    close_time = dt.datetime.utcnow().isoformat()
+    try:
+        trades_table.update_item(
+            Key={'trade_id': trade_id},
+            UpdateExpression="""
+                SET close_price = :cp,
+                    close_time  = :ct,
+                    realised_pnl = :p,
+                    balance_end  = :be,
+                    closed       = :cl
+            """,
+            ExpressionAttributeValues={
+                ':cp': Decimal(str(close_price)),
+                ':ct': close_time,
+                ':p':  Decimal(str(pnl)),
+                ':be': Decimal(str(balance_end)),
+                ':cl': True
+            }
+        )
+    except ClientError as e:
+        logging.error(f"DynamoDB close write failed: {e}")
+
+
 # ───────────────────────── WORKER ───────────────────────────
 def worker(sym):
     p_prec,q_prec,min_qty,min_cost = market_info(sym)
@@ -125,7 +177,24 @@ def worker(sym):
         if in_pos:
             try:
                 sts=[ex.fetch_order(i,sym)['status'] for i in orders.values()]
-                if any(s in ('closed','canceled') for s in sts): in_pos,orders=False,{}
+                if any(s in ('closed', 'canceled') for s in sts):
+                    # fetch final P&L and balance
+                    balance_info = ex.fetch_balance({'type': 'future'})
+                    balance_end = float(balance_info['info']['availableBalance'])
+                    # assume you stored entry_price earlier in orders or tracking structure
+                    closing_price = float(ex.fetch_ticker(sym)['last'])
+                    realised_pnl = (closing_price - entry_price) * trade_qty_if_long_else_inverse
+
+                    # write to DynamoDB
+                    write_trade_close(
+                        trade_id=orders.get('trade_id'),
+                        close_price=closing_price,
+                        pnl=realised_pnl,
+                        balance_end=balance_end
+                    )
+
+                    # reset flags
+                    in_pos, orders = False, {}
             except: pass
             time.sleep(10); continue
         if get_session(now)!='KillZone': time.sleep(30); continue
@@ -143,6 +212,20 @@ def worker(sym):
         logging.info(f"{sym}: {side} {qty} notional≈{noti:.2f}")
         try:
             entry = ex.create_order(sym,'MARKET',side.upper(),qty)
+            entry_price = float(entry['price'])
+            balance_start = avail  # free balance just before opening
+
+            # log to DynamoDB
+            trade_id = write_trade_open(
+                symbol=sym,
+                reason=f"Sweep {trade['dir']} at session {get_session(now)}",
+                entry_price=entry_price,
+                tp=tp,
+                sl=sl,
+                balance_start=balance_start
+            )
+            # store trade_id so you can reference it later
+            orders['trade_id'] = trade_id
         except ccxt.InsufficientFunds:
             logging.error(f"{sym}: abort, no funds")
             time.sleep(60); continue
