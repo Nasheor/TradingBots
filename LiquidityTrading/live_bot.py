@@ -103,6 +103,7 @@ def worker(sym):
 
     in_pos, orders, traded, last_day = False, {}, False, None
     while True:
+        logging.info("---------------------------------------------")
         now = dt.datetime.utcnow()
         # __PRINT CURRENT PRICE__
         ticker = ex.fetch_ticker(sym)
@@ -158,7 +159,6 @@ def worker(sym):
         else:
             orders={'tp':tp_id,'sl':sl_id}; in_pos,traded=True,True
             logging.info(f"{sym}: entry={entry['price']} TP={tp} SL={sl}")
-        logging.info("---------------------------------------------")
         time.sleep(10)
 
 # ─────────────────────── Main ─────────────────────────────
