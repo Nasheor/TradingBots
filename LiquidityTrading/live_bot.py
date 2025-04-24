@@ -99,7 +99,7 @@ def worker(sym):
     if not avail:
         logging.warning(f"{sym}: no free balance")
         return
-    logging.info(f"{sym}: free balance = {avail:.2f}")
+    logging.info(f"{sym}: free balance = {avail}")
 
     in_pos, orders, traded, last_day = False, {}, False, None
     while True:
