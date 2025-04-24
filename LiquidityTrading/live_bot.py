@@ -23,7 +23,7 @@ logging.basicConfig(
 
 # ───────────────────────── CONFIG ───────────────────────────
 RISK_PER_TRADE = 0.02       # 2 % of free wallet per trade
-LEVERAGE       = 25
+LEVERAGE       = 30
 RR_STATIC      = 3.0
 TIMEFRAME      = '5m'
 SYMBOLS        = ['SOL/USDT','XRP/USDT','LINK/USDT','BTC/USDT','ETH/USDT','LTC/USDT']
@@ -96,6 +96,8 @@ def worker(sym):
 
     bal = ex.fetch_balance({'type':'future'})
     avail =  bal.get('USDC')['total']
+    test = bal['free'].get('USDC', 0.0)
+    logging.info(f"{test} Testing")
     if not avail:
         logging.warning(f"{sym}: no free balance")
         return
