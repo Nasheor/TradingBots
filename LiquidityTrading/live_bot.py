@@ -214,7 +214,8 @@ def worker(sym):
             entry = ex.create_order(sym,'MARKET',side.upper(),qty)
             entry_price = float(entry['price'])
             balance_start = avail  # free balance just before opening
-
+            tp = d_round(trade['tp'], p_prec);
+            sl = d_round(trade['sl'], p_prec)
             # log to DynamoDB
             trade_id = write_trade_open(
                 symbol=sym,
@@ -233,7 +234,6 @@ def worker(sym):
             logging.error(f"{sym}: order err {e}")
             time.sleep(60); continue
 
-        tp = d_round(trade['tp'],p_prec); sl = d_round(trade['sl'],p_prec)
         try:
             tp_id=ex.create_order(sym,'LIMIT',hedge.upper(),qty,tp,{'reduceOnly':True,'timeInForce':'GTC'})['id']
             sl_id=ex.create_order(sym,'STOP_MARKET',hedge.upper(),qty,None,{'stopPrice':sl,'reduceOnly':True})['id']
