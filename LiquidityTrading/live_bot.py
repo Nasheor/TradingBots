@@ -28,8 +28,8 @@ RR_STATIC      = 3.0
 TIMEFRAME      = '5m'
 SYMBOLS        = ['SOL/USDT','XRP/USDT','LINK/USDT','BTC/USDT','ETH/USDT','LTC/USDT']
 TESTNET        = False
-API_KEY        = "<YOUR_KEY>"
-API_SECRET     = "<YOUR_SECRET>"
+API_KEY        = "rdpvKsuXdhdNXHPAM7XgZ6sfCQXLXBvfNFLMEQZNqaeHilqbIREar8LXWj65x8z8"
+API_SECRET     = "jciGO3TOYa5CSHVS1qWG2H0gV7hCtiRyC8eM3x5x3AqiRN2iXg91Z3uapXDsieLx"
 
 logging.info(f"Running on {socket.gethostname()}")
 
