@@ -61,3 +61,27 @@
 2025-04-23 13:42:41,290 [INFO] LINK/USDT | 2025-04-23 12:42:41.290415 | Starting with 22.06 USDT available.
 2025-04-23 13:42:41,301 [INFO] XRP/USDT | 2025-04-23 12:42:41.301148 | Starting with 22.06 USDT available.
 2025-04-23 13:42:41,422 [INFO] LTC/USDT | 2025-04-23 12:42:41.422079 | Starting with 22.06 USDT available.
+2025-04-25 10:41:28,343 [INFO] Running on Phoenix
+2025-04-25 11:08:35,672 [INFO] Running on Phoenix
+2025-04-25 11:09:12,443 [INFO] Running on Phoenix
+2025-04-25 11:13:34,347 [INFO] Running on Phoenix
+2025-04-25 11:13:44,489 [INFO] Running on Phoenix
+2025-04-25 11:20:32,872 [INFO] Running on Phoenix
+2025-04-25 11:20:47,535 [INFO] Running on Phoenix
+2025-04-25 11:21:10,071 [INFO] Running on Phoenix
+2025-04-25 11:21:25,843 [INFO] Running on Phoenix
+2025-04-25 11:23:52,934 [INFO] Running on Phoenix
+2025-04-25 11:23:52,994 [INFO] Found credentials in shared credentials file: ~/.aws/credentials
+2025-04-25 11:26:00,341 [INFO] Running on Phoenix
+2025-04-25 12:10:23,233 [INFO] Running on Phoenix
+2025-04-25 12:13:35,477 [INFO] Running on Phoenix
+2025-04-25 12:38:23,515 [INFO] Running on Phoenix
+2025-04-25 12:38:45,956 [INFO] Running on Phoenix
+2025-04-25 12:38:48,799 [INFO] Found credentials in shared credentials file: ~/.aws/credentials
+2025-04-25 12:38:48,970 [INFO] Bot starting – one trade/day; 2% risk; logging price
+2025-04-25 12:38:49,432 [INFO] SOL/USDT: available balance = 22.27 USDT
+2025-04-25 12:38:49,529 [INFO] LTC/USDT: available balance = 22.27 USDT
+2025-04-25 12:38:49,585 [INFO] ETH/USDT: available balance = 22.27 USDT
+2025-04-25 12:38:49,591 [INFO] XRP/USDT: available balance = 22.27 USDT
+2025-04-25 12:38:49,602 [INFO] BTC/USDT: available balance = 22.27 USDT
+2025-04-25 12:38:49,612 [INFO] LINK/USDT: available balance = 22.27 USDT
