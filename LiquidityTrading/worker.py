@@ -17,6 +17,13 @@ def worker(symbol):
     avail = fetch_balance()
     logging.info(f"{symbol}: available balance = {avail:.2f} USDT")
 
+    # ───────── load symbol-specific Binance filters ─────────
+    market = EX.market(symbol)
+    p_prec = int(market['precision'].get('price', 2) or 2)
+    q_prec = int(market['precision'].get('amount', 3) or 3)
+    min_qty = float(market['limits']['amount']['min'] or 0.0)
+    min_cost = float(market['limits']['cost']['min'] or 0.0)
+
     in_pos               = False
     orders               = {}
     trade_taken_session  = False
@@ -97,9 +104,19 @@ def worker(symbol):
             time.sleep(30)
             continue
 
-        qty      = d_round(trade['qty'], 8)  # round to 8 decimals (adjust if needed)
+        qty      = d_round(trade['qty'], q_prec)  # round to 8 decimals (adjust if needed)
         notional = qty * trade['entry']
 
+        # ───────── enforce Binance minima by bumping qty upward ─────────
+        if qty < min_qty:
+            logging.info(f"{symbol}: qty={qty} below min_qty={min_qty}, bumping to {min_qty}")
+            qty = min_qty
+        if qty * trade['entry'] < min_cost:
+            required_qty = min_cost / trade['entry']
+            qty = float(Decimal(required_qty).quantize(Decimal(f'1e-{q_prec}'), rounding=ROUND_UP))
+            logging.info(f"{symbol}: qty bumped to {qty} to meet min_notional={min_cost}")
+
+        notional = qty * trade['entry']
         side  = 'sell' if trade['dir'] == 'short' else 'buy'
         hedge = 'buy'  if side == 'sell' else 'sell'
 
