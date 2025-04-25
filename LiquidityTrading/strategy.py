@@ -29,7 +29,7 @@ def build_trade(k_df, sweep, avail, asia_df, london_df):
         tp        = max(asia_df['low'].min(), london_df['low'].min()) - (max(asia_df['low'].min(), london_df['low'].min()) - min(asia_df['low'].min(), london_df['low'].min()))*0.5
         direction = 'short'
     else:                 # sweep == 'low' → we go LONG
-        tp        = min(asia_df['high'].min(), london_df['high'].min()) + (max(asia_df['high'].min(), london_df['high'].min()) - min(asia_df['high'].min(), london_df['high'].min()))*0.5
+        tp        = min(asia_df['high'].max(), london_df['high'].max()) + (max(asia_df['high'].max(), london_df['high'].max()) - min(asia_df['high'].max(), london_df['high'].max()))*0.5
         direction = 'long'
 
     # 3) Compute total reward-distance, then derive SL so R:R = 1:3
