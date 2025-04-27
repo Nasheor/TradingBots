@@ -41,7 +41,11 @@ def worker(symbol):
         # ───────── poll existing position ─────────
         if in_pos:
             try:
-                statuses = [EX.fetch_order(o, symbol)['status'] for o in orders.values()]
+                statuses = [
+                    EX.fetch_order(orders[side], symbol)['status']
+                    for side in ('tp', 'sl')
+                    if side in orders
+                ]
                 if any(s in ('closed', 'canceled') for s in statuses):
                     # Trade closed: compute PnL and log
                     exit_price = float(fetch_price(symbol))
