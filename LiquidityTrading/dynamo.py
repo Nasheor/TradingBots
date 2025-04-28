@@ -28,11 +28,14 @@ def write_trade_open(symbol, reason, entry_price, tp, sl, balance_start):
         logging.error(f"DynamoDB open write failed: {e}")
     return trade_id
 
-def write_trade_close(trade_id, close_price, pnl, balance_end):
+def write_trade_close(trade_id, symbol, close_price, pnl, balance_end):
     close_time = dt.datetime.utcnow().isoformat()
     try:
         trades_table.update_item(
-            Key={'trade_id': trade_id},
+            Key={
+                'trade_id': trade_id,
+                'symbol': symbol
+            },
             UpdateExpression="""
                 SET close_price = :cp,
                     close_time  = :ct,

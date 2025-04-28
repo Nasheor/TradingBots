@@ -67,6 +67,7 @@ def worker(symbol):
                     # write to DynamoDB
                     write_trade_close(
                         trade_id=   orders['trade_id'],
+                        symbol=symbol,
                         close_price=exit_price,
                         pnl=         realised_pnl,
                         balance_end= balance_end
@@ -164,7 +165,7 @@ def worker(symbol):
             entry_price=entry['price'],
             tp=trade['tp'],
             sl=trade['sl'],
-            balance_start=avail
+            balance_start=avail,
         )
         orders['trade_id'] = trade_id
 
