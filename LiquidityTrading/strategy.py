@@ -1,6 +1,6 @@
 # liquidity_bot/strategy.py
 from decimal import Decimal, ROUND_DOWN, InvalidOperation
-from .config import RISK_PER_TRADE, LEVERAGE, RR_STATIC
+from config import RISK_PER_TRADE, LEVERAGE, RR_STATIC
 
 def d_round(val, prec):
     try:

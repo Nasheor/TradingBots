@@ -3,7 +3,7 @@ import time
 import datetime as dt
 import logging
 import pandas as pd
-
+from decimal      import Decimal, ROUND_UP
 from config       import TIMEFRAME, LEVERAGE
 from exchange     import EX, fetch_balance, fetch_price, fetch_ohlcv
 from sessions     import get_session, detect_sweep
@@ -41,11 +41,16 @@ def worker(symbol):
         # ───────── poll existing position ─────────
         if in_pos:
             try:
-                statuses = [
-                    EX.fetch_order(orders[side], symbol)['status']
-                    for side in ('tp', 'sl')
-                    if side in orders
-                ]
+                statuses = []
+                for side in ('tp', 'sl'):
+                    oid = orders.get(side)
+                    # if attach returned a full order dict, pull out its id
+                    if isinstance(oid, dict) and 'id' in oid:
+                        oid = oid['id']
+                    # only proceed if oid is now a non-empty string or int
+                    if not isinstance(oid, (str, int)) or not oid:
+                        continue
+                    statuses.append(EX.fetch_order(oid, symbol)['status'])
                 if any(s in ('closed', 'canceled') for s in statuses):
                     # Trade closed: compute PnL and log
                     exit_price = float(fetch_price(symbol))
@@ -91,7 +96,7 @@ def worker(symbol):
         except Exception as e:
             logging.warning(f"{symbol}: failed fetch price → {e}")
 
-        # ───────── load today’s candles and slice sessions ─────────
+        # ───────── load today’s candles and slice sessions ─────────Oka
         raw = fetch_ohlcv(symbol, TIMEFRAME, limit=500)
         df  = pd.DataFrame(raw, columns=['ts','open','high','low','close','volume'])
         df['ts'] = pd.to_datetime(df['ts'], unit='ms', utc=True)
@@ -103,24 +108,25 @@ def worker(symbol):
         killzone = today[today.index.map(lambda t: get_session(t) == 'KillZone')]
 
         # ───────── build and size the trade ─────────
-        trade = build_trade(killzone, detect_sweep(asia, london), avail)
+        trade = build_trade(killzone, detect_sweep(asia, london), avail, asia, london)
         if not trade:
             time.sleep(30)
             continue
+        # ───────── calculate & bump qty in one Decimal pass ─────────
+        entry_price = Decimal(str(trade['entry']))
+        raw_qty = Decimal(str(trade['qty']))
+        # minimums as Decimal
+        min_qty_dec = Decimal(str(min_qty))
+        min_notional_q = (Decimal(str(min_cost)) / entry_price)
 
-        qty      = d_round(trade['qty'], q_prec)  # round to 8 decimals (adjust if needed)
-        notional = qty * trade['entry']
+        # pick the largest: guarantees both min_qty & min_notional
+        required_qty = max(raw_qty, min_qty_dec, min_notional_q)
+        # quantize UP to the allowed precision
+        qty_dec = required_qty.quantize(Decimal(f'1e-{q_prec}'), rounding=ROUND_UP)
+        qty = float(qty_dec)
+        notional = qty * float(entry_price)
 
-        # ───────── enforce Binance minima by bumping qty upward ─────────
-        if qty < min_qty:
-            logging.info(f"{symbol}: qty={qty} below min_qty={min_qty}, bumping to {min_qty}")
-            qty = min_qty
-        if qty * trade['entry'] < min_cost:
-            required_qty = min_cost / trade['entry']
-            qty = float(Decimal(required_qty).quantize(Decimal(f'1e-{q_prec}'), rounding=ROUND_UP))
-            logging.info(f"{symbol}: qty bumped to {qty} to meet min_notional={min_cost}")
-
-        notional = qty * trade['entry']
+        logging.info(f"{symbol}: bumped qty→{qty:.{q_prec}f} notional≈{notional:.2f}")
         side  = 'sell' if trade['dir'] == 'short' else 'buy'
         hedge = 'buy'  if side == 'sell' else 'sell'
 
