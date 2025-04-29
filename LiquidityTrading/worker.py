@@ -144,19 +144,6 @@ def worker(symbol):
 
         # capture details for later close
         entry_price = float(entry['price'])
-        orders = {
-            'trade_id':    write_trade_open(
-                                symbol=symbol,
-                                reason=f"{trade['dir']} sweep",
-                                entry_price=entry_price,
-                                tp=trade['tp'],
-                                sl=trade['sl'],
-                                balance_start=avail
-                            ),
-            'entry_price': entry_price,
-            'qty':          qty,
-            'dir':          trade['dir']
-        }
 
         # write open to DynamoDB
         trade_id = write_trade_open(
@@ -167,7 +154,12 @@ def worker(symbol):
             sl=trade['sl'],
             balance_start=avail,
         )
-        orders['trade_id'] = trade_id
+        orders = {
+            'trade_id':    trade_id,
+            'entry_price': entry_price,
+            'qty':          qty,
+            'dir':          trade['dir']
+        }
 
         # attach TP/SL
         try:
