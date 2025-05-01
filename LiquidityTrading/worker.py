@@ -90,6 +90,10 @@ def worker(symbol):
             time.sleep(30)
             continue
 
+        # ───────── refresh available balance & log it ─────────
+        avail = fetch_balance()
+        logging.info(f"{symbol}: refreshed balance = {avail:.2f} USDT")
+
         # ───────── log current mark price ─────────
         try:
             price = fetch_price(symbol)
