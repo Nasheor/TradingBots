@@ -5,7 +5,7 @@ def get_session(ts: dt.datetime):
     h = ts.hour
     if h < 5:   return 'Asia'
     if h < 11:  return 'London'
-    if 11 <= h < 15: return 'KillZone'
+    if 13 <= h < 16: return 'KillZone'
     return 'Off'
 
 def detect_sweep(asia_df, london_df):
