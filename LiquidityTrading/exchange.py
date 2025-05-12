@@ -12,6 +12,7 @@ def make_exchange():
             'defaultType': 'future',
             'adjustForTimeDifference': True,
             'recvWindow': 60000,
+            'fetchCurrencies': False,
         },
         'urls': {'api': {'public': base, 'private': base}},
     })
