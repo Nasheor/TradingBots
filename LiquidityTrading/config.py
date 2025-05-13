@@ -19,8 +19,8 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.FileHandler("/home/ec2-user/TradingBots/LiquidityTrading/live_bot.log"),
-        # logging.FileHandler("live_bot.log"),
+        # logging.FileHandler("/home/ec2-user/TradingBots/LiquidityTrading/live_bot.log"),
+        logging.FileHandler("live_bot.log"),
         logging.StreamHandler()
     ]
 )

@@ -1,219 +1,143 @@
+import time
 import ccxt
 import pandas as pd
-import datetime
-import time
+from decimal import Decimal
+from sessions    import get_session, detect_sweep
+from structure   import ema_trend_signal, detect_structure
+from strategy    import build_trade
+from exchange    import EX, fetch_price          # EX is your ccxt.binanceusdm instance
+from config      import RISK_PER_TRADE, LEVERAGE, RR_STATIC
 
-# ----------------------------
-# 0. GLOBAL SETTINGS
-# ----------------------------
-ACCOUNT_SIZE_START = 2000.0
-RISK_PER_TRADE = 0.02
-LEVERAGE = 25
-RR_STATIC = 3.0
-START_DATE = '2024-01-01T00:00:00Z'
-TIMEFRAME = '5m'
-
-# ----------------------------
-# 1. FETCH FULL HISTORICAL DATA
-# ----------------------------
-def fetch_ohlcv(symbol='BTC/USDT', timeframe='5m', since=None):
-    binance = ccxt.binance({
-        'rateLimit': 1200,
-        'enableRateLimit': True,
-        # optional, but keeps things explicit
-        'options': {'defaultType': 'future'}
-    })
-
-    since = since or binance.parse8601(START_DATE)
-    all_candles = []
-
-    print("Fetching historical data...")
+# ─────────────────────────────────────────────────────────────────────────────
+# helper to fetch _all_ 5m bars since a given date
+# ─────────────────────────────────────────────────────────────────────────────
+def fetch_full(symbol, timeframe='5m', since_iso='2025-01-01T00:00:00Z'):
+    since = EX.parse8601(since_iso)
+    all_bars = []
     while True:
-        candles = binance.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=1000)
-        if not candles:
+        batch = EX.fetch_ohlcv(symbol, timeframe, since=since, limit=1000)
+        if not batch:
             break
-        all_candles += candles
-        since = candles[-1][0] + 1
-        time.sleep(1.1)
-        if since >= int(datetime.datetime.now().timestamp() * 1000):
-            break
-
-    df = pd.DataFrame(all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
-    df.set_index('timestamp', inplace=True)
+        all_bars += batch
+        # next fetch starts 1ms after the last bar we got
+        since = batch[-1][0] + 1
+        time.sleep(EX.rateLimit / 1000)
+    df = pd.DataFrame(all_bars, columns=['ts','open','high','low','close','vol'])
+    df['ts'] = pd.to_datetime(df['ts'], unit='ms', utc=True)
+    df.set_index('ts', inplace=True)
     return df
 
-# ----------------------------
-# 2. SESSION UTILS
-# ----------------------------
-def get_session_label(ts):
-    hour = ts.hour
-    if 0 <= hour < 5:
-        return 'Asia'
-    elif 5 <= hour < 11:
-        return 'London'
-    elif 14 <= hour < 17:
-        return 'KillZone'
-    else:
-        return 'Off'
+# ─────────────────────────────────────────────────────────────────────────────
+# backtest one symbol
+# ─────────────────────────────────────────────────────────────────────────────
+def backtest_symbol(symbol):
+    df5 = fetch_full(symbol, '5m')
+    # fetch a large chunk of 2h history up front
+    df2h = pd.DataFrame(
+        EX.fetch_ohlcv(symbol, '2h', limit=5000),
+        columns=['ts','open','high','low','close','vol']
+    )
+    df2h['ts'] = pd.to_datetime(df2h['ts'], unit='ms', utc=True)
+    df2h.set_index('ts', inplace=True)
+    sig2h = ema_trend_signal(df2h, length=50, backcandles=8)
 
-def get_daily_sessions(df_5m):
-    df_5m = df_5m.copy()
-    df_5m['date'] = df_5m.index.date
-    df_5m['session'] = df_5m.index.map(get_session_label)
+    balance = 1_000.0
+    trades  = []
 
-    grouped = {}
-    for dateval, day_df in df_5m.groupby('date'):
-        sessions = {}
-        for session, sess_df in day_df.groupby('session'):
-            sessions[session] = sess_df
-        grouped[dateval] = sessions
-    return grouped
+    # group by calendar date
+    for date, day5 in df5.groupby(df5.index.date):
+        # session slices
+        asia   = day5[day5.index.map(lambda t: get_session(t)=='Asia')]
+        london = day5[day5.index.map(lambda t: get_session(t)=='London')]
+        kill   = day5[day5.index.map(lambda t: get_session(t)=='KillZone')]
+        if asia.empty or london.empty or kill.empty:
+            continue
 
-# ----------------------------
-# 3. STRATEGY MODULES
-# ----------------------------
-def detect_sweeps_for_the_day(asian_df, london_df):
-    if asian_df.empty or london_df.empty:
-        return None
+        # 1) sweep bias
+        bias = detect_sweep(asia, london)
+        if not bias:
+            continue
 
-    asia_high = asian_df['high'].max()
-    asia_low = asian_df['low'].min()
-    london_high = london_df['high'].max()
-    london_low = london_df['low'].min()
+        # 2) trend alignment (2h)
+        # pick the last signal up to start of killzone (14:00)
+        cut = pd.Timestamp(f"{date}T14:00:00Z")
+        try:
+            last_sig = sig2h[:cut].iat[-1]
+        except IndexError:
+            continue
+        if bias=='low'  and last_sig != 2: continue
+        if bias=='high' and last_sig != 1: continue
 
-    high_swept = london_high > asia_high
-    low_swept = london_low < asia_low
+        # 3) preliminary SL/TP
+        tr = build_trade(kill, bias, balance, asia, london)
+        if not tr:
+            continue
 
-    if high_swept and not low_swept:
-        return 'high'
-    elif low_swept and not high_swept:
-        return 'low'
-    elif high_swept and low_swept:
-        return 'both'
-    else:
-        return None
-
-def execute_killzone_trade(killzone_df, sweep_side, account_balance):
-    if killzone_df.empty or sweep_side is None or sweep_side == 'both':
-        return None
-
-    first_candle = killzone_df.iloc[0]
-    entry_time = first_candle.name
-    entry_price = first_candle['close']
-
-    direction = 'short' if sweep_side == 'high' else 'long'
-    sl = first_candle['low'] * 0.999 if direction == 'long' else first_candle['high'] * 1.001
-    distance = abs(entry_price - sl)
-    if distance <= 0:
-        return None
-
-    tp = entry_price + distance * RR_STATIC if direction == 'long' else entry_price - distance * RR_STATIC
-    risk_amount = account_balance * RISK_PER_TRADE
-    position_size = risk_amount / distance
-
-    return {
-        'entry_time': entry_time,
-        'direction': direction,
-        'entry': entry_price,
-        'sl': sl,
-        'tp': tp,
-        'distance': distance,
-        'position_size': position_size
-    }
-
-def evaluate_trade(kz_df, trade):
-    eval_df = kz_df.loc[kz_df.index >= trade['entry_time']].copy()
-    if eval_df.empty:
-        return None
-
-    entry = trade['entry']
-    direction = trade['direction']
-    sl = trade['sl']
-    tp = trade['tp']
-    pos_size = trade['position_size']
-    result = None
-
-    for ts, row in eval_df.iterrows():
-        h, l = row['high'], row['low']
-        if direction == 'long':
-            if l <= sl:
-                result = 'loss'
-                exit_price = sl
+        # 4) wait for structure shift
+        kz = kill.reset_index(drop=False)
+        entry_price = None
+        for idx in range(len(kz)):
+            struct = detect_structure(kz, idx, backcandles=30, pivot_window=5)
+            if bias=='low'  and struct=='bullish':
+                entry_price = float(kz.loc[idx,'close'])
                 break
-            if h >= tp:
-                result = 'win'
-                exit_price = tp
+            if bias=='high' and struct=='bearish':
+                entry_price = float(kz.loc[idx,'close'])
                 break
-        else:
-            if h >= sl:
-                result = 'loss'
-                exit_price = sl
-                break
-            if l <= tp:
-                result = 'win'
-                exit_price = tp
-                break
+        if entry_price is None:
+            continue
 
-    if result is None:
-        result = 'session_close'
-        exit_price = eval_df.iloc[-1]['close']
+        # 5) size position: risk exactly 2%
+        sl_diff    = abs(entry_price - tr['sl'])
+        risk_usd   = balance * RISK_PER_TRADE
+        qty_risk   = risk_usd / sl_diff
+        qty_margin = risk_usd * LEVERAGE / entry_price
+        qty        = min(qty_risk, qty_margin)
 
-    pnl = (exit_price - entry) * pos_size if direction == 'long' else (entry - exit_price) * pos_size
+        # 6) simulate TP/SL
+        rem = kill[kill.index >= kz.loc[idx,'ts']]
+        exit_price, result = None, None
+        for _, row in rem.iterrows():
+            if bias=='low':
+                if row['low'] <= tr['sl']:
+                    exit_price, result = tr['sl'], 'SL'
+                    break
+                if row['high']>= tr['tp']:
+                    exit_price, result = tr['tp'], 'TP'
+                    break
+            else:
+                if row['high']>= tr['sl']:
+                    exit_price, result = tr['sl'], 'SL'
+                    break
+                if row['low'] <= tr['tp']:
+                    exit_price, result = tr['tp'], 'TP'
+                    break
+        if exit_price is None:
+            exit_price, result = rem.iloc[-1]['close'], 'END'
 
-    return {
-        'date': trade['entry_time'].date(),
-        'entry_time': trade['entry_time'],
-        'direction': direction,
-        'entry': entry,
-        'sl': sl,
-        'tp': tp,
-        'exit_price': exit_price,
-        'result': result,
-        'position_size': pos_size,
-        'pnl_usd': pnl
-    }
+        pnl = ((exit_price-entry_price) if bias=='low'
+               else (entry_price-exit_price)) * qty
+        balance += pnl
 
-# ----------------------------
-# 4. BACKTEST LOOP
-# ----------------------------
-def run_backtest(df_5m):
-    account_balance = ACCOUNT_SIZE_START
-    results = []
+        trades.append({
+            'date':    date,
+            'symbol':  symbol,
+            'bias':    bias,
+            'entry':   entry_price,
+            'tp':      tr['tp'],
+            'sl':      tr['sl'],
+            'exit':    exit_price,
+            'result':  result,
+            'pnl':     pnl,
+            'balance': balance
+        })
 
-    daily_sessions = get_daily_sessions(df_5m)
-    for dateval, sessions in sorted(daily_sessions.items()):
-        asia_df = sessions.get('Asia', pd.DataFrame())
-        london_df = sessions.get('London', pd.DataFrame())
-        killzone_df = sessions.get('KillZone', pd.DataFrame())
+    return pd.DataFrame(trades)
 
-        sweep = detect_sweeps_for_the_day(asia_df, london_df)
-        trade = execute_killzone_trade(killzone_df, sweep, account_balance)
 
-        if trade:
-            result = evaluate_trade(killzone_df, trade)
-            if result:
-                account_balance += result['pnl_usd']
-                result['account_balance'] = account_balance
-                results.append(result)
-
-    return pd.DataFrame(results)
-
-# ----------------------------
-# 5. MAIN EXECUTION
-# ----------------------------
 if __name__ == '__main__':
-    symbols = ['SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'LINK/USDT', 'BTC/USDT', 'ETH/USDT', 'LTC/USDT']
-
-    for symbol in symbols:
-        print(f"\n--- Backtesting {symbol} from Jan 1, 2025 ---")
-        df = fetch_ohlcv(symbol, '5m')
-        results = run_backtest(df)
-
-        if not results.empty:
-            csv_file = f"{symbol.replace('/', '')}_liquidity_backtest.csv"
-            results.to_csv(csv_file, index=False)
-            print(f"Results saved to {csv_file}")
-            print(f"Final Balance for {symbol}: ${results.iloc[-1]['account_balance']:.2f}")
-        else:
-            print("No valid trades found.")
+    symbols = ['SOL/USDT','XRP/USDT','LINK/USDT','LTC/USDT']
+    all_df  = [backtest_symbol(s) for s in symbols]
+    out     = pd.concat(all_df, ignore_index=True)
+    out.to_csv('killzone_backtest.csv', index=False)
+    print("✅ Backtest complete — results in killzone_backtest.csv")

@@ -24,7 +24,7 @@ from sessions     import get_session, detect_sweep
 from strategy     import build_trade, d_round
 from orders       import set_leverage, place_entry, attach_tp_sl
 from dynamo       import write_trade_open, write_trade_close
-from structure    import detect_structure  # now returns 'bullish', 'bearish', or None
+from structure    import detect_structure, ema_trend_signal  # now returns 'bullish', 'bearish', or None
 
 """
 Main loop for a single symbol:
@@ -152,22 +152,12 @@ def worker(symbol):
         # ───────── 2 h trend via 50-EMA backtest logic ─────────
         o2h = EX.fetch_ohlcv(symbol, '2h', limit=100)
         df2h = pd.DataFrame(o2h, columns=['ts','open','high','low','close','vol'])
-        df2h['EMA'] = ta.ema(df2h['close'], length=50)
+        df2h['ts'] = pd.to_datetime(df2h['ts'], unit='ms', utc=True)
+        df2h.set_index('ts', inplace=True)
+        # use our shared function: length=50, backcandles=8
+        sig = ema_trend_signal(df2h, length=50, backcandles=8)
+        last_sig = sig.iat[-1]
 
-        # build a rolling “all above / all below” signal
-        sig = [0]*len(df2h)
-        back = 8
-        for i in range(back, len(df2h)):
-            up_trend   = all(min(df2h['open'][j],df2h['close'][j]) > df2h['EMA'][j]
-                             for j in range(i-back, i+1))
-            down_trend = all(max(df2h['open'][j],df2h['close'][j]) < df2h['EMA'][j]
-                             for j in range(i-back, i+1))
-            if up_trend and down_trend: sig[i]=3 # Ranging
-            elif up_trend:              sig[i]=2 # Pure uptrend
-            elif down_trend:            sig[i]=1 # Pure downtrend
-
-        df2h['EMASignal']=sig
-        last_sig = df2h['EMASignal'].iat[-1]
         # require signal==2 for long, ==1 for short
         if bias=='low'  and last_sig!=2:
             logging.info(f"{symbol}: long bias but 2h EMASignal={last_sig}, skip")

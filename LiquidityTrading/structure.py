@@ -16,9 +16,14 @@ def load_htf_df(symbol, ex, lookback=500):
     df.set_index('ts', inplace=True)
     return df
 
-def ema_trend_signal(df, length=150, backcandles=15):
+def ema_trend_signal(df: pd.DataFrame,
+                     length: int = 150,
+                     backcandles: int = 15) -> pd.Series:
     """
-    Replicates your EMAsignal logic: returns a Series of 0/1/2/3.
+    Compute the “all‐above / all‐below” EMA signal on whatever timeframe
+    DataFrame you pass in (must have open, high, low, close).
+    Returns a pd.Series of 0/1/2/3 indexed the same as df.
+      0 = no clear trend, 1 = down, 2 = up, 3 = straddle
     """
     df = df.copy()
     df['EMA'] = ta.ema(df['close'], length=length)
