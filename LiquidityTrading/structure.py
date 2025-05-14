@@ -21,24 +21,38 @@ def ema_trend_signal(df: pd.DataFrame,
                      backcandles: int = 15) -> pd.Series:
     """
     Compute the “all‐above / all‐below” EMA signal on whatever timeframe
-    DataFrame you pass in (must have open, high, low, close).
+    DataFrame you pass in (must have open/high/low/close).
     Returns a pd.Series of 0/1/2/3 indexed the same as df.
-      0 = no clear trend, 1 = down, 2 = up, 3 = straddle
+      0 = no clear trend (or insufficient data for this bar),
+      1 = downtrend, 2 = uptrend, 3 = straddle/ranging.
     """
     df = df.copy()
     df['EMA'] = ta.ema(df['close'], length=length)
+
     sig = np.zeros(len(df), dtype=int)
+
+    # start at backcandles (we need at least that many bars)
     for i in range(backcandles, len(df)):
-        upt = all(min(df.iloc[j][['open','close']]) > df.iloc[j]['EMA']
-                  for j in range(i-backcandles, i+1))
-        dnt = all(max(df.iloc[j][['open','close']]) < df.iloc[j]['EMA']
-                  for j in range(i-backcandles, i+1))
+        window = df.iloc[i-backcandles:i+1]
+
+        # if any EMA is missing in this window, skip (leave as 0)
+        if window['EMA'].isna().any():
+            continue
+
+        # test “all closes & opens above EMA” & “all below”
+        upt = all(min(row[['open', 'close']]) > row['EMA']
+                  for _, row in window.iterrows())
+        dnt = all(max(row[['open', 'close']]) < row['EMA']
+                  for _, row in window.iterrows())
+
         if upt and dnt:
             sig[i] = 3
         elif upt:
             sig[i] = 2
         elif dnt:
             sig[i] = 1
+        # else remains 0
+
     return pd.Series(sig, index=df.index, name='EMASignal')
 
 def is_pivot(df, idx, window=5):
