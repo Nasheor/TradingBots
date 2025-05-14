@@ -1,6 +1,7 @@
 # structure.py
 import pandas as pd
 import numpy as np
+import logging
 from decimal import Decimal
 from scipy import stats  # if you need it later
 import pandas_ta as ta
@@ -33,10 +34,12 @@ def ema_trend_signal(df: pd.DataFrame,
 
     # start at backcandles (we need at least that many bars)
     for i in range(backcandles, len(df)):
+        idx = df.index[i]
         window = df.iloc[i-backcandles:i+1]
 
-        # if any EMA is missing in this window, skip (leave as 0)
+        # if any EMA is missing, skip this bar
         if window['EMA'].isna().any():
+            logging.debug(f"EMA signal: insufficient EMA data at {idx}, skipping")
             continue
 
         # test “all closes & opens above EMA” & “all below”

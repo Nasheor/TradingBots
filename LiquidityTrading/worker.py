@@ -115,7 +115,7 @@ def worker(symbol):
             continue
 
         # ───────── 2 h trend alignment via EMA signal ─────────
-        raw2h = EX.fetch_ohlcv(symbol, '2h', limit=100)
+        raw2h = EX.fetch_ohlcv(symbol, '2h', limit=200)
         df2h  = pd.DataFrame(raw2h, columns=['ts','open','high','low','close','vol'])
         df2h['ts'] = pd.to_datetime(df2h['ts'], unit='ms', utc=True)
         df2h.set_index('ts', inplace=True)
