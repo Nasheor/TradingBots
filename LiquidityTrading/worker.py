@@ -1,22 +1,8 @@
-"""
-Core idea:
-  1. During the 5 m “KillZone” (14:00–17:00 UTC), look for a “sweep” bias:
-     did London price action sweep above Asia’s high → short bias
-     or below Asia’s low → long bias?
-  2. Check the 2 h chart is trending in the same direction (via a 150-EMA check).
-  3. Wait for the first market-structure shift on the 5 m that agrees with that bias.
-  4. Size the position so that you risk exactly 2 % of your free USDT,
-     honoring Binance’s minimum size & notional requirements.
-  5. Place a MARKET entry + attached TP/SL orders, track it in DynamoDB,
-     and never take more than one trade per symbol per KillZone session.
-
-This worker() function is meant to be run in a dedicated thread per symbol.
-"""
+#!/usr/bin/env python3
 import time
 import datetime as dt
 import logging
 import pandas as pd
-import pandas_ta as ta
 from decimal      import Decimal, ROUND_UP
 from config       import TIMEFRAME, LEVERAGE
 from exchange     import EX, fetch_balance, fetch_price, fetch_ohlcv
@@ -24,94 +10,65 @@ from sessions     import get_session, detect_sweep
 from strategy     import build_trade, d_round
 from orders       import set_leverage, place_entry, attach_tp_sl
 from dynamo       import write_trade_open, write_trade_close
-from structure    import detect_structure, ema_trend_signal  # now returns 'bullish', 'bearish', or None
+from structure    import detect_structure, ema_trend_signal
 
-"""
-Main loop for a single symbol:
- - sets leverage
- - polls existing positions
- - detects sweep bias (Asia→London)
- - enforces 2 h trend alignment (150 EMA)
- - waits for 5 m structure shift matching bias
- - sizes & places trade (2 % risk)
- - attaches TP/SL, logs PnL on close
-"""
+
 def worker(symbol):
     # ───────── initialize symbol thread ─────────
-    # 1) Set our desired leverage on Binance Futures
     set_leverage(symbol, LEVERAGE)
-
-    # 2) Fetch initial free USDT balance
     avail = fetch_balance()
     logging.info(f"{symbol}: available balance = {avail:.2f} USDT")
 
     # ───────── load Binance filters ─────────
-    # 3) Load market filters (precision, minimums) from CCXT’s cached market info
-    mkt      = EX.market(symbol)
-    p_prec   = int(mkt['precision'].get('price', 2) or 2)
-    q_prec   = int(mkt['precision'].get('amount', 3) or 3)
-    min_qty  = float(mkt['limits']['amount']['min'] or 0.0)
-    min_cost = float(mkt['limits']['cost']['min']   or 0.0)
+    market   = EX.market(symbol)
+    p_prec   = int(market['precision'].get('price', 2) or 2)
+    q_prec   = int(market['precision'].get('amount', 3) or 3)
+    min_qty  = float(market['limits']['amount']['min'] or 0.0)
+    min_cost = float(market['limits']['cost']['min']   or 0.0)
 
-    # State variables
-    in_pos              = False
-    orders              = {}
-    taken_this_session  = False
-    last_session        = None
+    in_pos               = False
+    orders               = {}
+    trade_taken_session  = False
+    last_session         = None
 
-    # ─────────────────────────────────────────────────────────────
-    # 4) Main perpetual loop
-    # ─────────────────────────────────────────────────────────────
     while True:
-        # a) Get the current UTC time and map to our sessions
         now     = dt.datetime.now(dt.timezone.utc)
         session = get_session(now)
 
         # ───────── reset per-KillZone-session flags ─────────
-        # b) If session changed, clear our “one‐trade” flag
         if session != last_session:
-            taken_this_session = False
-            last_session       = session
+            trade_taken_session = False
+            last_session        = session
 
-        # ───────── monitor existing position for close ─────────
+        # ───────── check for close of existing position ─────────
         if in_pos:
             try:
                 statuses = []
-                # gather statuses of our TP & SL orders
                 for side in ('tp','sl'):
                     oid = orders.get(side)
-                    if isinstance(oid, dict):  # sometimes attach returns order‐dict
+                    if isinstance(oid, dict):
                         oid = oid.get('id')
                     if not oid:
                         continue
                     statuses.append(EX.fetch_order(oid, symbol)['status'])
-
-                # if either target or stop hits, we’re flat
                 if any(s in ('closed','canceled') for s in statuses):
                     exit_p     = float(fetch_price(symbol))
                     entry_p    = orders['entry_price']
                     qty        = orders['qty']
                     dirn       = orders['dir']
-
-                    # compute PnL depending on direction
-                    pnl        = ((exit_p - entry_p) if dirn=='long'
-                                  else (entry_p - exit_p)) * qty
+                    pnl        = ((exit_p-entry_p) if dirn=='long'
+                                  else (entry_p-exit_p)) * qty
                     bal_end    = fetch_balance()
-
-                    # record close in DynamoDB
                     write_trade_close(
-                        trade_id=orders['trade_id'],
-                        symbol=symbol,
+                        trade_id=   orders['trade_id'],
+                        symbol=     symbol,
                         close_price=exit_p,
-                        pnl=pnl,
-                        balance_end=bal_end,
+                        pnl=         pnl,
+                        balance_end= bal_end
                     )
                     logging.info(f"{symbol}: closed @ {exit_p:.4f}, PnL={pnl:.4f}")
-
-                    # reset state
                     in_pos, orders = False, {}
                 else:
-                    # still waiting for TP/SL, pause briefly
                     time.sleep(10)
                     continue
             except Exception as e:
@@ -119,8 +76,8 @@ def worker(symbol):
                 time.sleep(10)
                 continue
 
-        # ───────── skip unless fresh KillZone session entry allowed ─────────
-        if session != 'KillZone' or taken_this_session:
+        # ───────── allow one entry per symbol per KillZone session ─────────
+        if session != 'KillZone' or trade_taken_session:
             time.sleep(30)
             continue
 
@@ -133,107 +90,140 @@ def worker(symbol):
         except Exception as e:
             logging.warning(f"{symbol}: price fetch failed → {e}")
 
-        # ───────── build session‐sliced 5 m candles ─────────
-        o5m = fetch_ohlcv(symbol, TIMEFRAME, limit=500)
-        df5 = pd.DataFrame(o5m, columns=['ts','open','high','low','close','vol'])
-        df5['ts']      = pd.to_datetime(df5['ts'], unit='ms', utc=True)
+        # ───────── load today’s 5 m candles ─────────
+        raw5m = fetch_ohlcv(symbol, TIMEFRAME, limit=500)
+        df5   = pd.DataFrame(raw5m, columns=['ts','open','high','low','close','vol'])
+        df5['ts'] = pd.to_datetime(df5['ts'], unit='ms', utc=True)
         df5.set_index('ts', inplace=True)
-        today    = df5[df5.index.date == now.date()]
+        today = df5[df5.index.date == now.date()]
+        if today.empty:
+            time.sleep(30)
+            continue
+
+        # ───────── slice Asia / London / KillZone ─────────
         asia     = today[today.index.map(lambda t: get_session(t)=='Asia')]
         london   = today[today.index.map(lambda t: get_session(t)=='London')]
         killzone = today[today.index.map(lambda t: get_session(t)=='KillZone')]
+        if asia.empty or london.empty or killzone.empty:
+            time.sleep(30)
+            continue
 
-        # ───────── detect the Asia⇢London “sweep” bias ─────────
-        bias = detect_sweep(asia, london)  # 'high' or 'low' or None
+        # ───────── detect sweep bias ─────────
+        bias = detect_sweep(asia, london)
         if not bias:
             time.sleep(30)
             continue
 
-        # ───────── 2 h trend via 50-EMA backtest logic ─────────
-        o2h = EX.fetch_ohlcv(symbol, '2h', limit=100)
-        df2h = pd.DataFrame(o2h, columns=['ts','open','high','low','close','vol'])
+        # ───────── 2 h trend alignment via EMA signal ─────────
+        raw2h = EX.fetch_ohlcv(symbol, '2h', limit=100)
+        df2h  = pd.DataFrame(raw2h, columns=['ts','open','high','low','close','vol'])
         df2h['ts'] = pd.to_datetime(df2h['ts'], unit='ms', utc=True)
         df2h.set_index('ts', inplace=True)
-        # use our shared function: length=50, backcandles=8
-        sig = ema_trend_signal(df2h, length=50, backcandles=8)
-        last_sig = sig.iat[-1]
-
-        # require signal==2 for long, ==1 for short
-        if bias=='low'  and last_sig!=2:
+        sig2h = ema_trend_signal(df2h, length=150, backcandles=15)
+        last_sig = sig2h.iat[-1]
+        if bias=='low'  and last_sig != 2:
             logging.info(f"{symbol}: long bias but 2h EMASignal={last_sig}, skip")
             time.sleep(30)
             continue
-        if bias=='high' and last_sig!=1:
+        if bias=='high' and last_sig != 1:
             logging.info(f"{symbol}: short bias but 2h EMASignal={last_sig}, skip")
             time.sleep(30)
             continue
 
-        # ───────── preliminary trade params from killzone candles ─────────
-        trade = build_trade(killzone, bias, avail, asia, london)
-        if not trade:
+        # ───────── preliminary TP/SL sizing ─────────
+        tr = build_trade(killzone, bias, avail, asia, london)
+        if not tr:
             time.sleep(30)
             continue
 
-        # ───────── wait for a structure shift matching bias ─────────
-        kz = killzone.copy().reset_index(drop=False)
-        while True:
-            idx    = len(kz)-1
-            struct = detect_structure(kz, idx, backcandles=30, pivot_window=5)
-            # only take bullish shifts for long, bearish for short
-            if bias=='low'  and struct=='bullish':
-                trade['entry'] = float(kz.iloc[idx]['close'])
-                logging.info(f"{symbol}: bullish shift at {kz.iloc[idx]['ts']}, entry={trade['entry']:.4f}")
+        # ───────── prepare full‐day DF for structure detection ─────────
+        day_full   = today.reset_index(drop=False)
+        timestamps = day_full['ts']
+
+        # # ───────── find first 5 m structure shift at killzone timestamps ─────────
+        # entry_price = None
+        # for ts in killzone.index:
+        #     pos = timestamps.searchsorted(ts)
+        #     if detect_structure(day_full, pos, backcandles=30, pivot_window=5):
+        #         entry_price = float(day_full.iloc[pos]['close'])
+        #         logging.info(f"{symbol}: structure shift at {ts}, entry={entry_price:.4f}")
+        #         break
+        # ----------- ENTRY: first 200-EMA crossover inside KillZone---------------
+        kz = killzone.copy()
+        kz['EMA200'] = kz['close'].ewm(span=200, adjust=False).mean()
+        entry_price = None
+        for ts, row in kz.iterrows():
+            price = float(row['close'])
+            ema = float(row['EMA200'])
+            if bias == 'low' and price >= ema:
+                entry_price = price
+                cnt_struct += 1
                 break
-            if bias=='high' and struct=='bearish':
-                trade['entry'] = float(kz.iloc[idx]['close'])
-                logging.info(f"{symbol}: bearish shift at {kz.iloc[idx]['ts']}, entry={trade['entry']:.4f}")
+            if bias == 'high' and price <= ema:
+                entry_price = price
+                cnt_struct += 1
                 break
-            time.sleep(5)
-            # reload killzone data
-            raw   = fetch_ohlcv(symbol, TIMEFRAME, limit=500)
-            kz    = pd.DataFrame(raw, columns=['ts','open','high','low','close','volume'])
-            kz['ts'] = pd.to_datetime(kz['ts'], unit='ms', utc=True)
-            kz    = kz[kz['ts'].dt.date==now.date()].reset_index(drop=True)
 
-        # ───────── final sizing, respect 2 % risk & Binance minima ─────────
-        ep    = Decimal(str(trade['entry']))
-        rq    = Decimal(str(trade['qty']))
-        m_q   = Decimal(str(min_qty))
-        m_n   = Decimal(str(min_cost)) / ep
-        size  = max(rq, m_q, m_n).quantize(Decimal(f'1e-{q_prec}'), rounding=ROUND_UP)
-        qty   = float(size)
-        noti  = qty * float(ep)
-        logging.info(f"{symbol}: final qty→{qty:.{q_prec}f} notional≈{noti:.2f}")
+        # ───────── fallback to first killzone bar if no shift ─────────
+        if entry_price is None:
+            entry_price = float(killzone.iloc[0]['close'])
+            logging.info(f"{symbol}: no structure shift → fallback entry={entry_price:.4f}")
 
-        side  = 'sell' if bias=='high' else 'buy'
-        hedge = 'buy'  if side=='sell' else 'sell'
+        # ───────── final sizing: 2 % risk & Binance minima ─────────
+        sl_diff    = abs(entry_price - tr['sl'])
+        risk_usd   = avail * RISK_PER_TRADE
+        qty_risk   = risk_usd / sl_diff
+        qty_margin = risk_usd * LEVERAGE / entry_price
+        raw_qty    = min(qty_risk, qty_margin)
 
-        # ───────── place market entry + attach TP/SL ─────────
+        ep_dec      = Decimal(str(entry_price))
+        required_q  = max(
+            Decimal(str(raw_qty)),
+            Decimal(str(min_qty)),
+            Decimal(str(min_cost)) / ep_dec
+        )
+        qty_dec = required_q.quantize(Decimal(f'1e-{q_prec}'), ROUND_UP)
+        qty     = float(qty_dec)
+        notional = qty * entry_price
+
+        logging.info(f"{symbol}: placing {'sell' if bias=='high' else 'buy'} {qty:.{q_prec}f} notional≈{notional:.2f}")
         try:
-            entry = place_entry(symbol, side, qty)
+            entry = place_entry(symbol, bias=='high' and 'sell' or 'buy', qty)
         except Exception as e:
-            logging.error(f"{symbol}: entry failed → {e}")
+            logging.error(f"{symbol}: entry order failed → {e}")
             time.sleep(60)
             continue
 
-        taken_this_session = True
+        trade_taken_session = True
+
+        # ───────── write open to DynamoDB ─────────
         ep_float = float(entry['price'])
         tid = write_trade_open(
             symbol=symbol,
             reason=f"{bias} sweep + 5m structure",
-            entry_price=entry['price'],
-            tp=trade['tp'],
-            sl=trade['sl'],
-            balance_start=avail
+            entry_price=ep_float,
+            tp=tr['tp'],
+            sl=tr['sl'],
+            balance_start=avail,
         )
-        orders = {'trade_id':tid, 'entry_price':ep_float, 'qty':qty, 'dir':trade['dir']}
+        orders = {'trade_id': tid, 'entry_price': ep_float, 'qty': qty, 'dir': tr['dir']}
 
+        # ───────── attach TP/SL ─────────
+        hedge = bias=='high' and 'buy' or 'sell'
         try:
-            tp_id, sl_id = attach_tp_sl(symbol, hedge, qty, trade['tp'], trade['sl'])
-            orders.update(tp=tp_id, sl=sl_id)
+            tp_id, sl_id = attach_tp_sl(symbol, hedge, qty, tr['tp'], tr['sl'])
+            orders.update({'tp': tp_id, 'sl': sl_id})
             in_pos = True
-            logging.info(f"{symbol}: entry={ep_float:.4f} TP={trade['tp']:.4f} SL={trade['sl']:.4f}")
+            logging.info(f"{symbol}: entry={ep_float:.4f} TP={tr['tp']:.4f} SL={tr['sl']:.4f}")
         except Exception as e:
-            logging.error(f"{symbol}: TP/SL attach error → {e}")
+            logging.error(f"{symbol}: TP/SL attach failed → {e}")
 
         time.sleep(10)
+
+if __name__ == '__main__':
+    logging.info("Bot starting – one trade per symbol per UTC day · 2 % risk with trend alignment")
+    import threading
+    for s in SYMBOLS:
+        threading.Thread(target=worker, args=(s,), daemon=True).start()
+    while True:
+        time.sleep(60)

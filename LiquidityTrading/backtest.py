@@ -1,122 +1,142 @@
+#!/usr/bin/env python3
 import time
-import ccxt
 import pandas as pd
 from decimal import Decimal
-from sessions    import get_session, detect_sweep
-from structure   import ema_trend_signal, detect_structure
-from strategy    import build_trade
-from exchange    import EX, fetch_price          # EX is your ccxt.binanceusdm instance
-from config      import RISK_PER_TRADE, LEVERAGE, RR_STATIC
+from exchange import EX
+from sessions import get_session, detect_sweep
+from structure import ema_trend_signal, detect_structure
+from strategy import build_trade
+from config import  RISK_PER_TRADE, LEVERAGE
 
-# ─────────────────────────────────────────────────────────────────────────────
-# helper to fetch _all_ 5m bars since a given date
-# ─────────────────────────────────────────────────────────────────────────────
-def fetch_full(symbol, timeframe='5m', since_iso='2025-01-01T00:00:00Z'):
-    since = EX.parse8601(since_iso)
+# ────────────────────────────────────────────────────────────────────────────
+# Helper to page through Binance’s 1000-bar limit
+# ────────────────────────────────────────────────────────────────────────────
+def fetch_full(symbol, timeframe):
+    since = EX.parse8601('2025-01-01T00:00:00Z')
     all_bars = []
     while True:
         batch = EX.fetch_ohlcv(symbol, timeframe, since=since, limit=1000)
         if not batch:
             break
         all_bars += batch
-        # next fetch starts 1ms after the last bar we got
         since = batch[-1][0] + 1
         time.sleep(EX.rateLimit / 1000)
-    df = pd.DataFrame(all_bars, columns=['ts','open','high','low','close','vol'])
+    df = pd.DataFrame(all_bars, columns=['ts','open','high','low','close','volume'])
     df['ts'] = pd.to_datetime(df['ts'], unit='ms', utc=True)
     df.set_index('ts', inplace=True)
     return df
 
-# ─────────────────────────────────────────────────────────────────────────────
-# backtest one symbol
-# ─────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────
+# Backtest one symbol’s performance using the live‐bot logic
+# ────────────────────────────────────────────────────────────────────────────
 def backtest_symbol(symbol):
-    df5 = fetch_full(symbol, '5m')
-    # fetch a large chunk of 2h history up front
-    df2h = pd.DataFrame(
-        EX.fetch_ohlcv(symbol, '2h', limit=5000),
-        columns=['ts','open','high','low','close','vol']
-    )
-    df2h['ts'] = pd.to_datetime(df2h['ts'], unit='ms', utc=True)
-    df2h.set_index('ts', inplace=True)
-    sig2h = ema_trend_signal(df2h, length=50, backcandles=8)
+    print(f"\n▶️ Backtesting {symbol}")
+    # 1) load data
+    df5   = fetch_full(symbol, '5m')
+    df2h  = fetch_full(symbol, '2h')
+    if df5.empty or df2h.empty:
+        print("   insufficient data, skipping")
+        return pd.DataFrame()
 
-    balance = 1_000.0
-    trades  = []
+    # 2) compute 2h EMA-trend signal
+    sig2h = ema_trend_signal(df2h, length=150, backcandles=15)
 
-    # group by calendar date
+    balance    = 1_000.0
+    trades     = []
+    cnt_sweep  = cnt_trend = cnt_struct = 0
+
+    # 3) iterate by calendar day
     for date, day5 in df5.groupby(df5.index.date):
-        # session slices
-        asia   = day5[day5.index.map(lambda t: get_session(t)=='Asia')]
-        london = day5[day5.index.map(lambda t: get_session(t)=='London')]
-        kill   = day5[day5.index.map(lambda t: get_session(t)=='KillZone')]
-        if asia.empty or london.empty or kill.empty:
+        # slice sessions
+        asia     = day5[day5.index.map(lambda t: get_session(t)=='Asia')]
+        london   = day5[day5.index.map(lambda t: get_session(t)=='London')]
+        killzone = day5[day5.index.map(lambda t: get_session(t)=='KillZone')]
+        if asia.empty or london.empty or killzone.empty:
             continue
 
-        # 1) sweep bias
+        # a) sweep bias
         bias = detect_sweep(asia, london)
         if not bias:
             continue
+        cnt_sweep += 1
 
-        # 2) trend alignment (2h)
-        # pick the last signal up to start of killzone (14:00)
-        cut = pd.Timestamp(f"{date}T14:00:00Z")
-        try:
-            last_sig = sig2h[:cut].iat[-1]
-        except IndexError:
+        # b) trend-alignment at first KillZone candle
+        first_kz = killzone.index[0]
+        sig_sub  = sig2h[:first_kz]
+        if sig_sub.empty:
             continue
-        if bias=='low'  and last_sig != 2: continue
-        if bias=='high' and last_sig != 1: continue
+        last_sig = sig_sub.iat[-1]
+        if bias=='low' and last_sig!=2:
+            continue
+        if bias=='high' and last_sig!=1:
+            continue
+        cnt_trend += 1
 
-        # 3) preliminary SL/TP
-        tr = build_trade(kill, bias, balance, asia, london)
+        # c) preliminary TP/SL from first kill-zone candle
+        tr = build_trade(killzone, bias, balance, asia, london)
         if not tr:
             continue
 
-        # 4) wait for structure shift
-        kz = kill.reset_index(drop=False)
+        # # d) detect first 5m structure shift (full-day context)
+        # day_full   = day5.reset_index(drop=False)  # integer positions 0..N-1
+        # timestamps = day_full['ts']
+        # entry_price = None
+        # for ts in killzone.index:
+        #     pos = timestamps.searchsorted(ts)
+        #     if detect_structure(day_full, pos, backcandles=30, pivot_window=5):
+        #         print("Change of structure detected")
+        #         entry_price = float(day_full.iloc[pos]['close'])
+        #         cnt_struct += 1
+        #         break
+        # d) ENTRY: first 200-EMA crossover inside KillZone
+        kz = killzone.copy()
+        kz['EMA200'] = kz['close'].ewm(span=200, adjust=False).mean()
         entry_price = None
-        for idx in range(len(kz)):
-            struct = detect_structure(kz, idx, backcandles=30, pivot_window=5)
-            if bias=='low'  and struct=='bullish':
-                entry_price = float(kz.loc[idx,'close'])
+
+        for ts, row in kz.iterrows():
+            price = float(row['close'])
+            ema = float(row['EMA200'])
+            if bias == 'low' and price >= ema:
+                entry_price = price
+                cnt_struct += 1
                 break
-            if bias=='high' and struct=='bearish':
-                entry_price = float(kz.loc[idx,'close'])
+            if bias == 'high' and price <= ema:
+                entry_price = price
+                cnt_struct += 1
                 break
+
+        # fallback → first kill-zone close if no shift
         if entry_price is None:
-            continue
+            entry_price = float(killzone.iloc[0]['close'])
 
-        # 5) size position: risk exactly 2%
-        sl_diff    = abs(entry_price - tr['sl'])
-        risk_usd   = balance * RISK_PER_TRADE
-        qty_risk   = risk_usd / sl_diff
+        # e) final sizing: 2% risk & leverage
+        sl_diff  = abs(entry_price - tr['sl'])
+        risk_usd = balance * RISK_PER_TRADE
+        qty_risk = risk_usd / sl_diff
         qty_margin = risk_usd * LEVERAGE / entry_price
-        qty        = min(qty_risk, qty_margin)
+        raw_qty = min(qty_risk, qty_margin)
 
-        # 6) simulate TP/SL
-        rem = kill[kill.index >= kz.loc[idx,'ts']]
-        exit_price, result = None, None
+        # f) simulate trade exit
+        rem = killzone[killzone.index >= killzone.index[0]]
+        exit_price = None
+        result = None
         for _, row in rem.iterrows():
+            h, l = row['high'], row['low']
             if bias=='low':
-                if row['low'] <= tr['sl']:
-                    exit_price, result = tr['sl'], 'SL'
-                    break
-                if row['high']>= tr['tp']:
-                    exit_price, result = tr['tp'], 'TP'
-                    break
+                if l <= tr['sl']:
+                    exit_price, result = tr['sl'], 'SL'; break
+                if h >= tr['tp']:
+                    exit_price, result = tr['tp'], 'TP'; break
             else:
-                if row['high']>= tr['sl']:
-                    exit_price, result = tr['sl'], 'SL'
-                    break
-                if row['low'] <= tr['tp']:
-                    exit_price, result = tr['tp'], 'TP'
-                    break
+                if h >= tr['sl']:
+                    exit_price, result = tr['sl'], 'SL'; break
+                if l <= tr['tp']:
+                    exit_price, result = tr['tp'], 'TP'; break
         if exit_price is None:
             exit_price, result = rem.iloc[-1]['close'], 'END'
 
-        pnl = ((exit_price-entry_price) if bias=='low'
-               else (entry_price-exit_price)) * qty
+        pnl      = ((exit_price - entry_price) if bias=='low'
+                    else (entry_price - exit_price)) * raw_qty
         balance += pnl
 
         trades.append({
@@ -132,12 +152,19 @@ def backtest_symbol(symbol):
             'balance': balance
         })
 
+    # 4) summary
+    print(f" sweeps={cnt_sweep}, trend_ok={cnt_trend}, struct_hits={cnt_struct}, trades={len(trades)}")
     return pd.DataFrame(trades)
 
-
+# ────────────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
-    symbols = ['SOL/USDT','XRP/USDT','LINK/USDT','LTC/USDT']
-    all_df  = [backtest_symbol(s) for s in symbols]
-    out     = pd.concat(all_df, ignore_index=True)
-    out.to_csv('killzone_backtest.csv', index=False)
-    print("✅ Backtest complete — results in killzone_backtest.csv")
+    universe = ['BTC/USDT', 'ETH/USDT']
+    # universe = ['SOL/USDT']
+    all_trades = []
+    for sym in universe:
+        df_tr = backtest_symbol(sym)
+        if not df_tr.empty:
+            file = sym.split('/')[0]+"_backtest.csv"
+            df_tr.to_csv(file, index=False)
+        else:
+            print("\n⚠️ No trades generated for "+sym+"; check your filters!")
