@@ -157,11 +157,11 @@ def worker(symbol):
             ema = float(row['EMA200'])
             if bias == 'low' and price >= ema:
                 entry_price = price
-                cnt_struct += 1
+                logging.info(f"{symbol}: EMA200 crossover at {ts}, entry={entry_price:.4f}")
                 break
             if bias == 'high' and price <= ema:
                 entry_price = price
-                cnt_struct += 1
+                logging.info(f"{symbol}: EMA200 crossover at {ts}, entry={entry_price:.4f}")
                 break
 
         # ───────── fallback to first killzone bar if no shift ─────────
