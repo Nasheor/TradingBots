@@ -4,7 +4,7 @@ import datetime as dt
 import logging
 import pandas as pd
 from decimal      import Decimal, ROUND_UP
-from config       import TIMEFRAME, LEVERAGE
+from config       import TIMEFRAME, LEVERAGE, RISK_PER_TRADE
 from exchange     import EX, fetch_balance, fetch_price, fetch_ohlcv
 from sessions     import get_session, detect_sweep
 from strategy     import build_trade, d_round
