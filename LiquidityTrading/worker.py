@@ -140,29 +140,29 @@ def worker(symbol):
         day_full   = today.reset_index(drop=False)
         timestamps = day_full['ts']
 
-        # # ───────── find first 5 m structure shift at killzone timestamps ─────────
-        # entry_price = None
-        # for ts in killzone.index:
-        #     pos = timestamps.searchsorted(ts)
-        #     if detect_structure(day_full, pos, backcandles=30, pivot_window=5):
-        #         entry_price = float(day_full.iloc[pos]['close'])
-        #         logging.info(f"{symbol}: structure shift at {ts}, entry={entry_price:.4f}")
-        #         break
-        # ----------- ENTRY: first 200-EMA crossover inside KillZone---------------
-        kz = killzone.copy()
-        kz['EMA200'] = kz['close'].ewm(span=200, adjust=False).mean()
+        # ───────── find first 5 m structure shift at killzone timestamps ─────────
         entry_price = None
-        for ts, row in kz.iterrows():
-            price = float(row['close'])
-            ema = float(row['EMA200'])
-            if bias == 'low' and price >= ema:
-                entry_price = price
-                logging.info(f"{symbol}: EMA200 crossover at {ts}, entry={entry_price:.4f}")
+        for ts in killzone.index:
+            pos = timestamps.searchsorted(ts)
+            if detect_structure(day_full, pos, backcandles=30, pivot_window=5):
+                entry_price = float(day_full.iloc[pos]['close'])
+                logging.info(f"{symbol}: structure shift at {ts}, entry={entry_price:.4f}")
                 break
-            if bias == 'high' and price <= ema:
-                entry_price = price
-                logging.info(f"{symbol}: EMA200 crossover at {ts}, entry={entry_price:.4f}")
-                break
+        # # ----------- ENTRY: first 200-EMA crossover inside KillZone---------------
+        # kz = killzone.copy()
+        # kz['EMA200'] = kz['close'].ewm(span=200, adjust=False).mean()
+        # entry_price = None
+        # for ts, row in kz.iterrows():
+        #     price = float(row['close'])
+        #     ema = float(row['EMA200'])
+        #     if bias == 'low' and price >= ema:
+        #         entry_price = price
+        #         logging.info(f"{symbol}: EMA200 crossover at {ts}, entry={entry_price:.4f}")
+        #         break
+        #     if bias == 'high' and price <= ema:
+        #         entry_price = price
+        #         logging.info(f"{symbol}: EMA200 crossover at {ts}, entry={entry_price:.4f}")
+        #         break
 
         # ───────── fallback to first killzone bar if no shift ─────────
         if entry_price is None:
