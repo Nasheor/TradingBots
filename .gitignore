@@ -1,3 +1,6 @@
 */venv/
-*/killzonebot.service
+*/killbot.service
 */live_bot.log
+live_bot.log
+LiquidityTrading/live_bot.log
+*/backtest_results
