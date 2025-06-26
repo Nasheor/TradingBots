@@ -1,0 +1,17 @@
+# ───────── core exchange / networking ─────────
+ccxt        # Binance Futures REST/WebSocket wrapper
+websockets         # ccxt’s WS transport
+
+# ───────── data wrangling & maths ─────────
+pandas
+numpy
+python-dateutil  # robust datetime parsing / offsets
+pytz                 # optional, but handy for explicit tz handling
+
+# ───────── AWS DynamoDB logging ─────────
+boto3        # includes botocore as a sub-dependency
+
+# ───────── optional / nice-to-have ─────────
+matplotlib      # only for back-test equity plots
+tenacity       # if you want decorator-based retry logic
+python-dotenv   # load API keys from a .env file (if you use one)
