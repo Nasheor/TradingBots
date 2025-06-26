@@ -8,10 +8,10 @@ RR_STATIC      = 3.0
 TIMEFRAME      = '5m'
 SYMBOLS        = ['SOL/USDT','XRP/USDT','LINK/USDT','LTC/USDT']
 TESTNET        = False
-API_KEY        = "rdpvKsuXdhdNXHPAM7XgZ6sfCQXLXBvfNFLMEQZNqaeHilqbIREar8LXWj65x8z8"  # pull from env in real code
-API_SECRET     = "jciGO3TOYa5CSHVS1qWG2H0gV7hCtiRyC8eM3x5x3AqiRN2iXg91Z3uapXDsieLx"
-AWS_ACCESS_KEY = "AKIAVGIWSCAHROXEOSUZ"
-AWS_SECRET_KEY = "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"
+API_KEY        = ""  # pull from env in real code
+API_SECRET     = ""
+AWS_ACCESS_KEY = ""
+AWS_SECRET_KEY = ""
 REGION_NAME    = "eu-west-1"
 
 # Logging

@@ -1,1 +1,95 @@
- I want to modify the strategy such that TP is either Londen low
+ I want to modify the strategy such that TP is either Londen low2025-05-12 16:13:03,604 [INFO] Running on Phoenix
+2025-05-12 16:15:50,194 [INFO] Running on Phoenix
+2025-05-12 17:18:15,235 [INFO] Running on Phoenix
+2025-05-12 17:40:22,823 [INFO] Running on Phoenix
+2025-05-12 17:40:26,988 [INFO] Bot starting – one trade/day; 2% risk; logging price
+2025-05-12 17:40:27,448 [INFO] SOL/USDT: available balance = 117.92 USDT
+2025-05-12 17:40:27,546 [INFO] LINK/USDT: available balance = 117.92 USDT
+2025-05-12 17:40:27,609 [INFO] XRP/USDT: available balance = 117.92 USDT
+2025-05-12 17:40:27,610 [INFO] LTC/USDT: available balance = 117.92 USDT
+2025-05-13 00:06:13,605 [INFO] Running on Phoenix
+2025-05-13 00:08:20,940 [INFO] Running on Phoenix
+2025-05-13 00:09:00,220 [INFO] Running on Phoenix
+2025-05-13 00:09:23,252 [INFO] Running on Phoenix
+2025-05-13 00:10:13,665 [INFO] Running on Phoenix
+2025-05-13 00:10:20,528 [INFO] Bot starting – one trade/day; 2% risk; logging price
+2025-05-13 00:10:20,989 [INFO] SOL/USDT: available balance = 117.92 USDT
+2025-05-13 00:10:21,091 [INFO] LTC/USDT: available balance = 117.92 USDT
+2025-05-13 00:10:21,143 [INFO] LINK/USDT: available balance = 117.92 USDT
+2025-05-13 00:10:21,146 [INFO] XRP/USDT: available balance = 117.92 USDT
+2025-05-13 00:22:29,294 [INFO] Running on Phoenix
+2025-05-13 00:22:34,100 [INFO] Bot starting – one trade/day; 2% risk; logging price
+2025-05-13 00:22:34,558 [INFO] SOL/USDT: available balance = 117.92 USDT
+2025-05-13 00:22:34,646 [INFO] XRP/USDT: available balance = 117.92 USDT
+2025-05-13 00:22:34,699 [INFO] LINK/USDT: available balance = 117.92 USDT
+2025-05-13 00:22:34,701 [INFO] LTC/USDT: available balance = 117.92 USDT
+2025-05-13 20:51:25,776 [INFO] Running on Phoenix
+2025-05-13 20:52:48,800 [INFO] Running on Phoenix
+2025-05-13 20:52:54,627 [INFO] Bot starting – one trade/day; 2% risk; logging price
+2025-05-13 20:52:54,926 [WARNING] SOL/USDT: leverage set failed binanceusdm {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action, request ip: 37.228.254.60"}
+2025-05-13 20:52:55,527 [WARNING] LINK/USDT: leverage set failed binanceusdm {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action, request ip: 37.228.254.60"}
+2025-05-13 20:52:55,581 [WARNING] LTC/USDT: leverage set failed binanceusdm {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action, request ip: 37.228.254.60"}
+2025-05-13 20:52:55,591 [WARNING] XRP/USDT: leverage set failed binanceusdm {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action, request ip: 37.228.254.60"}
+2025-05-13 20:54:50,576 [INFO] Running on Phoenix
+2025-05-13 20:54:54,710 [INFO] Bot starting – one trade/day; 2% risk; logging price
+2025-05-13 20:54:55,166 [INFO] SOL/USDT: available balance = 117.94 USDT
+2025-05-13 20:54:55,258 [INFO] XRP/USDT: available balance = 117.94 USDT
+2025-05-13 20:54:55,304 [INFO] LINK/USDT: available balance = 117.94 USDT
+2025-05-13 20:54:55,313 [INFO] LTC/USDT: available balance = 117.94 USDT
+2025-05-13 20:54:55,388 [INFO] SOL/USDT: balance = 117.94 USDT
+2025-05-13 20:54:55,481 [INFO] XRP/USDT: balance = 117.94 USDT
+2025-05-13 20:54:55,532 [INFO] LINK/USDT: balance = 117.94 USDT
+2025-05-13 20:54:55,586 [INFO] LTC/USDT: balance = 117.94 USDT
+2025-05-13 20:54:55,626 [INFO] SOL/USDT: market price = 181.9000
+2025-05-13 20:54:55,702 [INFO] XRP/USDT: market price = 2.5783
+2025-05-13 20:54:55,760 [INFO] LINK/USDT: market price = 17.6360
+2025-05-13 20:54:55,817 [INFO] LTC/USDT: market price = 104.1900
+2025-05-13 20:54:56,443 [INFO] XRP/USDT: short bias but 2h EMASignal=2, skip
+2025-05-13 21:11:21,727 [INFO] Running on Phoenix
+2025-05-13 21:13:47,999 [INFO] Running on Phoenix
+2025-05-13 21:17:23,774 [INFO] Running on Phoenix
+2025-05-13 21:21:09,206 [INFO] Running on Phoenix
+2025-05-13 21:27:32,873 [INFO] Running on Phoenix
+2025-05-13 21:32:57,573 [INFO] Running on Phoenix
+2025-05-13 21:38:30,920 [INFO] Running on Phoenix
+2025-05-13 21:47:37,076 [INFO] Running on Phoenix
+2025-05-13 21:49:16,207 [INFO] Running on Phoenix
+2025-05-13 21:59:32,602 [INFO] Running on Phoenix
+2025-05-13 22:06:40,155 [INFO] Running on Phoenix
+2025-05-13 22:17:54,114 [INFO] Running on Phoenix
+2025-05-13 22:25:21,347 [INFO] Running on Phoenix
+2025-05-13 22:45:10,011 [INFO] Running on Phoenix
+2025-05-13 22:50:57,810 [INFO] Running on Phoenix
+2025-05-13 22:56:02,800 [INFO] Running on Phoenix
+2025-05-13 23:02:00,582 [INFO] Running on Phoenix
+2025-05-13 23:14:34,347 [INFO] Running on Phoenix
+2025-05-13 23:27:34,409 [INFO] Running on Phoenix
+2025-05-13 23:38:07,560 [INFO] Running on Phoenix
+2025-05-13 23:43:02,946 [INFO] Running on Phoenix
+2025-05-13 23:50:18,052 [INFO] Running on Phoenix
+2025-05-14 08:28:35,186 [INFO] Running on Phoenix
+2025-05-14 08:57:14,213 [INFO] Running on Phoenix
+2025-05-14 10:48:56,230 [INFO] Running on Phoenix
+2025-05-14 10:57:38,612 [INFO] Running on Phoenix
+2025-05-14 11:03:49,911 [INFO] Running on Phoenix
+2025-05-14 11:06:53,158 [INFO] Running on Phoenix
+2025-05-14 11:12:34,157 [INFO] Running on Phoenix
+2025-05-14 11:15:57,188 [INFO] Running on Phoenix
+2025-05-14 11:18:48,315 [INFO] Running on Phoenix
+2025-05-14 11:44:07,163 [INFO] Running on Phoenix
+2025-05-14 11:45:07,364 [INFO] Running on Phoenix
+2025-05-14 11:48:21,515 [INFO] Running on Phoenix
+2025-05-14 11:49:37,520 [INFO] Running on Phoenix
+2025-05-14 11:53:05,929 [INFO] Running on Phoenix
+2025-05-14 11:55:25,808 [INFO] Running on Phoenix
+2025-05-14 11:55:59,684 [INFO] Running on Phoenix
+2025-05-14 11:56:04,495 [INFO] Bot starting – one trade/day; 2% risk; logging price
+2025-05-14 11:56:04,965 [INFO] SOL/USDT: available balance = 117.92 USDT
+2025-05-14 11:56:05,073 [INFO] LINK/USDT: available balance = 117.92 USDT
+2025-05-14 11:56:05,116 [INFO] XRP/USDT: available balance = 117.92 USDT
+2025-05-14 11:56:05,148 [INFO] LTC/USDT: available balance = 117.92 USDT
+2025-05-15 18:15:36,190 [INFO] Running on Phoenix
+2025-05-15 18:15:50,259 [INFO] Bot starting – one trade/day; 2% risk; logging price
+2025-05-15 18:15:50,718 [INFO] SOL/USDT: available balance = 107.82 USDT
+2025-05-15 18:15:50,952 [INFO] SOL/USDT: balance = 107.82 USDT
+2025-05-15 18:15:51,174 [INFO] SOL/USDT: market price = 173.1600
