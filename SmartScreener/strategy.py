@@ -3,31 +3,55 @@
 import pandas as pd
 from exchange import EXCHANGE
 
+
 def compute_indicators(symbol):
-    ohlcv = None
     try:
-        # print(f"[DEBUG] Fetching OHLCV for {symbol}")
-        ohlcv = EXCHANGE.fetch_ohlcv(symbol, timeframe='5m', limit=300)
+        ohlcv = EXCHANGE.fetch_ohlcv(symbol, timeframe='15m', limit=300)
         df = pd.DataFrame(ohlcv, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
+
         df['EMA_200'] = df['close'].ewm(span=200).mean()
-        df['RSI'] = compute_rsi(df['close'], 80)
+        df['RSI'] = compute_rsi(df['close'], 14)
+        slope = df['EMA_200'].diff().iloc[-1]
 
+        price = df['close'].iloc[-1]
+        ema200 = df['EMA_200'].iloc[-1]
+        rsi = df['RSI'].iloc[-1]
+        current_vol = df['vol'].iloc[-1]
+        avg_vol = df['vol'].rolling(50).mean().iloc[-1]  # 50 period average volume
 
-        trend_2h = EXCHANGE.fetch_ohlcv(symbol, timeframe='1h', limit=300)
-        df_2h = pd.DataFrame(trend_2h, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
-        slope = df_2h['close'].ewm(span=200).mean().diff().iloc[-1]
+        confluence = []
+        if slope > 0:
+            confluence.append("Uptrend (EMA slope positive)")
+        elif slope < 0:
+            confluence.append("Downtrend (EMA slope negative)")
+
+        if price > ema200:
+            confluence.append("Price above EMA200 (bullish)")
+        elif price < ema200:
+            confluence.append("Price below EMA200 (bearish)")
+
+        if rsi < 30:
+            confluence.append("RSI oversold (<30) potential long")
+        elif rsi > 70:
+            confluence.append("RSI overbought (>70) potential short")
+
+        if current_vol > avg_vol * 1.5:
+            confluence.append(f"Volume spike ({current_vol:.0f} vs {avg_vol:.0f})")
+        elif current_vol < avg_vol * 0.5:
+            confluence.append(f"Volume unusually low ({current_vol:.0f} vs {avg_vol:.0f})")
 
         return {
-            'trend_slope': slope,
-            '2m_close': df['close'].iloc[-1],
-            '2m_ema200': df['EMA_200'].iloc[-1],
-            'RSI': df['RSI'].iloc[-1]
+            'slope': slope,
+            'price': price,
+            'ema200': ema200,
+            'rsi': rsi,
+            'volume': current_vol,
+            'avg_volume': avg_vol,
+            'confluence': ", ".join(confluence)
         }
-    except Exception:
-        print(f"[DEBUG] No OHLCV returned for {symbol}")
-        if not ohlcv or len(ohlcv) < 200:
-            print(f"[DEBUG] Insufficient OHLCV for {symbol}")
-            print(ohlcv)
+
+    except Exception as e:
+        print(f"[ERROR] Failed to compute indicators for {symbol}: {e}")
         return None
 
 def compute_rsi(series, period=14):

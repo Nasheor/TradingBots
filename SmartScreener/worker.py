@@ -71,3 +71,7 @@ if __name__ == "__main__":
 # Repo: LiquidityTrading upgraded to VolatilityVision
 # Purpose: Screen top 50 volatile funding coins for clean setups with GPT insights
 # Next Step: Hook result storage & optional alerts
+
+
+# Tasks Remaining
+# 1. Test it with back testing
