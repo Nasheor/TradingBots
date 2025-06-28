@@ -6,6 +6,7 @@ from config import LOOKBACK_PERIOD, TOP_N
 from exchange import EXCHANGE
 from strategy import compute_indicators, compute_rsi
 from analyse_result import gpt_rank_setups
+from discord_notify import send_discord_message
 
 # -------- Main Screener ---------
 def fetch_top_funding_volatile_symbols():
@@ -53,7 +54,25 @@ def run_screener():
     ranked_output = gpt_rank_setups(setups)
     print("\n[GPT Rankings]\n", ranked_output)
 
+    discord_intro = "🚀 **VolatilityVision - GPT Ranked Setups** 🚀\n"
+    discord_msg = discord_intro + ranked_output
+    send_discord_message(discord_msg)
+
     # TODO: Store to DynamoDB or S3 as per dynamo.py logic
+
+def format_discord_message(setups):
+    msg = "🚀 **VolatilityVision - Top Trade Setups** 🚀\n"
+    for s in setups:
+        msg += (
+            f"\n🔹 {s['symbol']}\n"
+            f"• Trend: {'Uptrend' if s['slope'] > 0 else 'Downtrend'} (EMA slope {s['slope']:.5f})\n"
+            f"• Price: {s['price']:.2f} {'above' if s['price'] > s['ema200'] else 'below'} EMA200\n"
+            f"• RSI: {s['rsi']:.2f} {'(Oversold, potential long)' if s['rsi'] < 30 else '(Overbought, potential short)' if s['rsi'] > 70 else ''}\n"
+            f"• Volume: {s['volume']:.0f} ({'Spike' if s['volume'] > s['avg_volume'] * 1.5 else 'Low' if s['volume'] < s['avg_volume'] * 0.5 else 'Normal'})\n"
+            f"• Confluence: {s['confluence']}\n"
+            f"-------------------------\n"
+        )
+    return msg
 
 # -------- Run ---------
 if __name__ == "__main__":
