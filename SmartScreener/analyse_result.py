@@ -11,7 +11,7 @@ def gpt_rank_setups(setups):
     for s in setups:
         prompt += f"\n- {s['symbol']}: Trend slope={s['slope']:.5f}, Price={s['price']:.2f}, EMA200={s['ema200']:.2f}, RSI={s['rsi']:.2f}, Volume={s['volume']:.0f}, Avg Volume={s['avg_volume']:.0f}, Confluence: {s['confluence']}"
 
-    prompt += "\n\nReturn a ranked list top three and bottom three with reasoning for each."
+    prompt += "\n\nReturn a ranked list top five with reasoning for each."
 
     response = client.chat.completions.create(
         model=GPT_MODEL,
