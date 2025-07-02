@@ -6,7 +6,7 @@ from exchange import EXCHANGE
 
 def compute_indicators(symbol):
     try:
-        ohlcv = EXCHANGE.fetch_ohlcv(symbol, timeframe='15m', limit=300)
+        ohlcv = EXCHANGE.fetch_ohlcv(symbol, timeframe='2m', limit=300)
         df = pd.DataFrame(ohlcv, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
 
         df['EMA_200'] = df['close'].ewm(span=200).mean()
