@@ -29,6 +29,7 @@ def fetch_top_funding_volatile_symbols():
                 continue
             df = pd.DataFrame(funding)
             df['fundingRate'] = df['fundingRate'].astype(float)
+            latest_funding = df['fundingRate'].iloc[-1]
             volatility = df['fundingRate'].std()
             vol_data.append((market['symbol'].split(":")[0], volatility))
         except Exception as e:
