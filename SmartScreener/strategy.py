@@ -39,17 +39,10 @@ def compute_indicators(symbol):
             confluence.append(f"Volume spike ({current_vol:.0f} vs {avg_vol:.0f})")
         elif current_vol < avg_vol * 0.5:
             confluence.append(f"Volume unusually low ({current_vol:.0f} vs {avg_vol:.0f})")
-            # Sweep detection (basic logic)
-            recent_low = df['low'].rolling(5).min().iloc[-2]
-            recent_high = df['high'].rolling(5).max().iloc[-2]
 
-            if df['low'].iloc[-1] < recent_low:
-                confluence.append("Recent liquidity sweep low")
-            if df['high'].iloc[-1] > recent_high:
-                confluence.append("Recent liquidity sweep high")
         # Sweep detection (basic logic)
-        recent_low = df['low'].rolling(5).min().iloc[-2]
-        recent_high = df['high'].rolling(5).max().iloc[-2]
+        recent_low = df['low'].rolling(37).min().iloc[-2]
+        recent_high = df['high'].rolling(37).max().iloc[-2]
 
         if df['low'].iloc[-1] < recent_low:
             confluence.append("Recent liquidity sweep low")
