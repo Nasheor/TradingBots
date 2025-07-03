@@ -31,22 +31,41 @@ def fetch_top_funding_volatile_symbols():
             df['fundingRate'] = df['fundingRate'].astype(float)
             latest_funding = df['fundingRate'].iloc[-1]
             volatility = df['fundingRate'].std()
-            vol_data.append((market['symbol'].split(":")[0], volatility))
+            vol_data.append((market['symbol'].split(":")[0], volatility, latest_funding))
         except Exception as e:
             continue
 
     ranked = sorted(vol_data, key=lambda x: x[1], reverse=True)
-    return [s[0] for s in ranked[:TOP_N]]
+    return [(s[0], s[2]) for s in ranked[:TOP_N]]
 
 def run_screener():
-    top_symbols = fetch_top_funding_volatile_symbols()
+    top_symbols_with_funding = fetch_top_funding_volatile_symbols()
+    top_symbols = [s[0] for s in top_symbols_with_funding]
+    funding_dict = {s[0]: s[1] for s in top_symbols_with_funding}
+
     print(f"[INFO] Top {TOP_N} volatile USDT-M symbols: {top_symbols}")
 
     setups = []
     for sym in top_symbols:
         indicators = compute_indicators(sym)
         if indicators:
-            setups.append({'symbol': sym, **indicators})
+            indicators['funding_rate'] = funding_dict.get(sym, 0)
+
+            # Higher timeframe 1H trend filter
+            trend_15m = EXCHANGE.fetch_ohlcv(sym, timeframe='15m', limit=300)
+            df_15m = pd.DataFrame(trend_15m, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
+            slope_15m = df_15m['close'].ewm(span=100).mean().diff().iloc[-1]
+
+            if slope_15m > 0 > indicators['slope']:
+                continue  # 1H uptrend but 15m suggesting short, discard
+            if slope_15m < 0 < indicators['slope']:
+                continue  # 1H downtrend but 15m suggesting long, discard
+
+            # Funding extremes filter
+            if abs(indicators['funding_rate']) < 0.0005:
+                continue  # Ignore setups with neutral funding
+
+            setups.append({'symbol': sym, **indicators, 'slope_15m': slope_15m})
 
     if not setups:
         print("[INFO] No valid setups found.")
