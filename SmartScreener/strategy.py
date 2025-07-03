@@ -6,7 +6,7 @@ from exchange import EXCHANGE
 
 def compute_indicators(symbol):
     try:
-        ohlcv = EXCHANGE.fetch_ohlcv(symbol, timeframe='2m', limit=300)
+        ohlcv = EXCHANGE.fetch_ohlcv(symbol, timeframe='3m', limit=300)
         df = pd.DataFrame(ohlcv, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
 
         df['EMA_200'] = df['close'].ewm(span=200).mean()
@@ -39,7 +39,22 @@ def compute_indicators(symbol):
             confluence.append(f"Volume spike ({current_vol:.0f} vs {avg_vol:.0f})")
         elif current_vol < avg_vol * 0.5:
             confluence.append(f"Volume unusually low ({current_vol:.0f} vs {avg_vol:.0f})")
+            # Sweep detection (basic logic)
+            recent_low = df['low'].rolling(5).min().iloc[-2]
+            recent_high = df['high'].rolling(5).max().iloc[-2]
 
+            if df['low'].iloc[-1] < recent_low:
+                confluence.append("Recent liquidity sweep low")
+            if df['high'].iloc[-1] > recent_high:
+                confluence.append("Recent liquidity sweep high")
+        # Sweep detection (basic logic)
+        recent_low = df['low'].rolling(5).min().iloc[-2]
+        recent_high = df['high'].rolling(5).max().iloc[-2]
+
+        if df['low'].iloc[-1] < recent_low:
+            confluence.append("Recent liquidity sweep low")
+        if df['high'].iloc[-1] > recent_high:
+            confluence.append("Recent liquidity sweep high")
         return {
             'slope': slope,
             'price': price,

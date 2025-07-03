@@ -52,20 +52,20 @@ def run_screener():
             indicators['funding_rate'] = funding_dict.get(sym, 0)
 
             # Higher timeframe 1H trend filter
-            trend_1h = EXCHANGE.fetch_ohlcv(sym, timeframe='1h', limit=300)
-            df_1h = pd.DataFrame(trend_1h, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
-            slope_1h = df_1h['close'].ewm(span=200).mean().diff().iloc[-1]
+            trend_15m = EXCHANGE.fetch_ohlcv(sym, timeframe='15m', limit=300)
+            df_15m = pd.DataFrame(trend_15m, columns=['ts', 'open', 'high', 'low', 'close', 'vol'])
+            slope_15m = df_15m['close'].ewm(span=100).mean().diff().iloc[-1]
 
-            if slope_1h > 0 > indicators['slope']:
+            if slope_15m > 0 > indicators['slope']:
                 continue  # 1H uptrend but 15m suggesting short, discard
-            if slope_1h < 0 < indicators['slope']:
+            if slope_15m < 0 < indicators['slope']:
                 continue  # 1H downtrend but 15m suggesting long, discard
 
             # Funding extremes filter
             if abs(indicators['funding_rate']) < 0.0005:
                 continue  # Ignore setups with neutral funding
 
-            setups.append({'symbol': sym, **indicators, 'slope_1h': slope_1h})
+            setups.append({'symbol': sym, **indicators, 'slope_15m': slope_15m})
 
     if not setups:
         print("[INFO] No valid setups found.")
