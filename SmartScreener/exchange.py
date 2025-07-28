@@ -10,7 +10,8 @@ EXCHANGE = ccxt.binance({
     'secret': os.getenv("BINANCE_API_SECRET"),
     'enableRateLimit': True,
     'options': {
-        'defaultType': 'future'
+        'defaultType': 'future',
+        'adjustForTimeDifference': True
     }
     # 'urls': {'api': {'public': base, 'private': base}},
 })
